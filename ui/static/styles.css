@@ -736,51 +736,51 @@ input:disabled {
   min-width: 120px;
 }
 
-.loading-overlay {
-  position: fixed;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  background: rgba(2, 8, 10, 0.72);
-  backdrop-filter: blur(8px);
-  z-index: 100;
-}
-
-.loading-card {
-  width: min(420px, 100%);
-  padding: 24px;
-  border-radius: 24px;
-  border: 1px solid var(--line-strong);
-  background: linear-gradient(180deg, rgba(10, 35, 41, 0.98), rgba(8, 25, 29, 0.98));
-  box-shadow: var(--shadow-lg);
-  text-align: center;
-}
-
-.loading-card strong {
-  display: block;
-  margin-bottom: 8px;
-  font-size: 1.05rem;
-}
-
-.loading-card p {
-  margin: 0;
-  color: var(--muted);
-}
-
 .spinner {
-  width: 48px;
-  height: 48px;
-  margin: 0 auto 14px;
+  width: 18px;
+  height: 18px;
   border-radius: 999px;
-  border: 4px solid rgba(89, 217, 255, 0.18);
+  border: 3px solid rgba(89, 217, 255, 0.18);
   border-top-color: var(--sky);
   border-right-color: var(--green);
   animation: orbix-spin 0.9s linear infinite;
 }
 
-body.is-loading {
-  overflow: hidden;
+.btn.is-loading {
+  position: relative;
+  color: transparent !important;
+  pointer-events: none;
+}
+
+.btn.is-loading::after {
+  content: "";
+  position: absolute;
+  inset: 50% auto auto 50%;
+  width: 18px;
+  height: 18px;
+  margin-left: -9px;
+  margin-top: -9px;
+  border-radius: 999px;
+  border: 3px solid rgba(255, 255, 255, 0.25);
+  border-top-color: currentColor;
+  border-right-color: currentColor;
+  animation: orbix-spin 0.9s linear infinite;
+}
+
+.btn.primary.is-loading::after {
+  border-color: rgba(3, 44, 35, 0.25);
+  border-top-color: #032c23;
+  border-right-color: #032c23;
+}
+
+.loading-status {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.loading-status[hidden] {
+  display: none;
 }
 
 @keyframes orbix-spin {

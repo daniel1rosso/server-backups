@@ -17,7 +17,7 @@
         <p>Fetch logs directly over SSH or from the local host runtime.</p>
       </div>
     </header>
-    <form method="get" action="{{ url_for('logs_view') }}" class="form-grid" data-loading-message="Buscando logs y validando el origen seleccionado...">
+    <form method="get" action="{{ url_for('logs_view') }}" class="form-grid" data-loading-message="Buscando logs y validando el origen seleccionado..." data-loading-text="Buscando...">
       <div class="field">
         <label>Server</label>
         <select name="server_filename">
@@ -43,6 +43,7 @@
       <div class="form-actions span-2">
         <button class="btn primary" type="submit">Preview</button>
       </div>
+      <p class="loading-status span-2" data-loading-status hidden></p>
     </form>
   </article>
 

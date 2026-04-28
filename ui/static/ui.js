@@ -132,34 +132,30 @@
   };
 
   const initLoading = (scope = document) => {
-    const overlay = document.querySelector("[data-loading-overlay]");
-    if (!(overlay instanceof HTMLElement)) return;
-    const title = overlay.querySelector("strong");
-    const text = overlay.querySelector("p");
-
-    const resetLoading = () => {
-      overlay.hidden = true;
-      document.body.classList.remove("is-loading");
-    };
-
-    resetLoading();
-    window.addEventListener("pageshow", resetLoading);
-    window.addEventListener("load", resetLoading);
-
     scope.querySelectorAll("form").forEach((form) => {
       if (!(form instanceof HTMLFormElement) || form.dataset.loadingBound === "true") return;
       form.dataset.loadingBound = "true";
       form.addEventListener("submit", () => {
         const action = form.getAttribute("action") || "";
         if (form.dataset.skipLoading === "true" || action.startsWith("/actions/")) return;
-        if (title instanceof HTMLElement) {
-          title.textContent = form.dataset.loadingTitle || "Procesando acción";
+        form.classList.add("is-submitting");
+
+        const statusEl = form.querySelector("[data-loading-status]");
+        if (statusEl instanceof HTMLElement) {
+          statusEl.hidden = false;
+          statusEl.textContent = form.dataset.loadingMessage || "Orbix está procesando la solicitud...";
         }
-        if (text instanceof HTMLElement) {
-          text.textContent = form.dataset.loadingMessage || "Orbix está trabajando. Esto puede tardar unos segundos.";
-        }
-        overlay.hidden = false;
-        document.body.classList.add("is-loading");
+
+        form.querySelectorAll('button[type="submit"]').forEach((button) => {
+          if (!(button instanceof HTMLButtonElement)) return;
+          if (!button.dataset.originalText) {
+            button.dataset.originalText = button.textContent || "";
+          }
+          button.disabled = true;
+          button.classList.add("is-loading");
+          button.setAttribute("aria-busy", "true");
+          button.textContent = button.dataset.loadingText || "Cargando...";
+        });
       });
     });
   };

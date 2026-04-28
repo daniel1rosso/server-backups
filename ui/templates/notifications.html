@@ -22,13 +22,14 @@
         <p>These values are stored in <code>/etc/backup/global.env</code>.</p>
       </div>
     </header>
-    <form method="post" action="{{ url_for('save_notifications') }}" class="form-grid">
+    <form method="post" action="{{ url_for('save_notifications') }}" class="form-grid" data-loading-message="Guardando notificaciones..." data-loading-text="Guardando...">
       <div class="field"><label>Enabled</label><input name="TELEGRAM_ENABLED" value="{{ settings.TELEGRAM_ENABLED }}"></div>
       <div class="field"><label>Chat ID</label><input name="TELEGRAM_CHAT_ID" value="{{ settings.TELEGRAM_CHAT_ID }}"></div>
       <div class="field span-2"><label>Bot Token</label><input name="TELEGRAM_BOT_TOKEN" value="{{ settings.TELEGRAM_BOT_TOKEN }}"></div>
       <div class="form-actions span-2">
         <button class="btn primary" type="submit">Save Notifications</button>
       </div>
+      <p class="loading-status span-2" data-loading-status hidden></p>
     </form>
   </article>
 

@@ -66,13 +66,6 @@
         {% block content %}{% endblock %}
       </main>
     </div>
-    <div class="loading-overlay" data-loading-overlay hidden>
-      <div class="loading-card" role="status" aria-live="polite">
-        <div class="spinner" aria-hidden="true"></div>
-        <strong>Procesando acción</strong>
-        <p>Orbix está trabajando. Esto puede tardar unos segundos.</p>
-      </div>
-    </div>
     <script src="{{ url_for('static', filename='ui.js') }}"></script>
   </body>
 </html>

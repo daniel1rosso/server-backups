@@ -79,7 +79,7 @@
 
     <div class="server-admin" id="server-admin-{{ loop.index }}" hidden>
       <div class="panel-divider"></div>
-      <form method="post" action="{{ url_for('save_server') }}" class="form-grid">
+      <form method="post" action="{{ url_for('save_server') }}" class="form-grid" data-loading-message="Guardando configuración del server..." data-loading-text="Guardando...">
         <input type="hidden" name="filename" value="{{ server.filename }}">
         <div class="field"><label>Server ID</label><input name="SERVER_ID" value="{{ server.SERVER_ID }}"></div>
         <div class="field"><label>Role</label><input name="SOURCE_ROLE" value="{{ server.SOURCE_ROLE }}"></div>
@@ -123,6 +123,7 @@
         <div class="form-actions span-2">
           <button class="btn primary" type="submit">Save Profile</button>
         </div>
+        <p class="loading-status span-2" data-loading-status hidden></p>
       </form>
 
       <form class="danger-form" method="post" action="{{ url_for('delete_server') }}" onsubmit="return confirm('Delete this server profile?');">
@@ -145,7 +146,7 @@
       </div>
       <button class="btn ghost modal-close" type="button" data-modal-close>Cerrar</button>
     </header>
-    <form method="post" action="{{ url_for('save_server') }}" class="form-grid">
+    <form method="post" action="{{ url_for('save_server') }}" class="form-grid" data-loading-message="Creando nuevo server..." data-loading-text="Creando...">
       <div class="field"><label>Filename</label><input name="filename" placeholder="orbix-new-vps.env"></div>
       <div class="field"><label>Server ID</label><input name="SERVER_ID" placeholder="orbix-new-vps"></div>
       <div class="field"><label>Role</label><input name="SOURCE_ROLE" placeholder="generic-remote"></div>
@@ -172,6 +173,7 @@
       <div class="form-actions span-2">
         <button class="btn primary" type="submit">Create Server</button>
       </div>
+      <p class="loading-status span-2" data-loading-status hidden></p>
     </form>
   </div>
 </dialog>

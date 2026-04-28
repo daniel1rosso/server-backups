@@ -137,6 +137,15 @@
     const title = overlay.querySelector("strong");
     const text = overlay.querySelector("p");
 
+    const resetLoading = () => {
+      overlay.hidden = true;
+      document.body.classList.remove("is-loading");
+    };
+
+    resetLoading();
+    window.addEventListener("pageshow", resetLoading);
+    window.addEventListener("load", resetLoading);
+
     scope.querySelectorAll("form").forEach((form) => {
       if (!(form instanceof HTMLFormElement) || form.dataset.loadingBound === "true") return;
       form.dataset.loadingBound = "true";

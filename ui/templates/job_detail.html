@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% set title = "Orbix Job Detail" %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <div class="eyebrow">Job Detail</div>
+    <h2>{{ job.job_type }} / {{ job.target }}</h2>
+  </div>
+  <span class="badge {{ job.status }}">{{ job.status }}</span>
+</section>
+
+<section class="content-grid two-up">
+  <article class="panel">
+    <header class="panel-head">
+      <div>
+        <h3>Execution Metadata</h3>
+        <p>Command, payload and lifecycle state for this Orbix job.</p>
+      </div>
+    </header>
+    <div class="summary-grid">
+      <div><span>ID</span><strong><code>{{ job.id }}</code></strong></div>
+      <div><span>Status</span><strong>{{ job.status }}</strong></div>
+      <div><span>Created</span><strong>{{ job.created_at }}</strong></div>
+      <div><span>Started</span><strong>{{ job.started_at or "-" }}</strong></div>
+      <div><span>Finished</span><strong>{{ job.finished_at or "-" }}</strong></div>
+      <div><span>Exit Code</span><strong>{{ job.exit_code if job.exit_code is not none else "-" }}</strong></div>
+      <div class="span-2"><span>Command</span><strong><code>{{ job.command }}</code></strong></div>
+      <div class="span-2"><span>Log Path</span><strong><code>{{ job.log_path }}</code></strong></div>
+      <div class="span-2"><span>Payload</span><strong><code>{{ job.payload_json }}</code></strong></div>
+    </div>
+  </article>
+
+  <article class="panel">
+    <header class="panel-head">
+      <div>
+        <h3>Live Log</h3>
+        <p>Refreshes automatically while the job remains queued or running.</p>
+      </div>
+    </header>
+    <pre class="log-box" id="job-log">{{ log_text }}</pre>
+  </article>
+</section>
+
+<script>
+(() => {
+  const status = {{ job.status|tojson }};
+  if (!["queued", "running"].includes(status)) return;
+  const logEl = document.getElementById("job-log");
+  const poll = async () => {
+    const res = await fetch({{ url_for('job_json', job_id=job.id)|tojson }});
+    if (!res.ok) return;
+    const data = await res.json();
+    logEl.textContent = data.log_tail || "";
+    if (["queued", "running"].includes(data.status)) {
+      setTimeout(poll, 5000);
+    } else {
+      window.location.reload();
+    }
+  };
+  setTimeout(poll, 5000);
+})();
+</script>
+{% endblock %}

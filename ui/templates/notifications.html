@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% set title = "Orbix Notifications" %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <div class="eyebrow">Notifications</div>
+    <h2>Manage Telegram settings used by backups, disk alerts and test notifications.</h2>
+  </div>
+  <div class="page-actions">
+    <form method="post" action="{{ url_for('action_test_telegram') }}">
+      <button class="btn ghost" type="submit">Send Test Notification</button>
+    </form>
+  </div>
+</section>
+
+<section class="content-grid two-up">
+  <article class="panel">
+    <header class="panel-head">
+      <div>
+        <h3>Telegram Settings</h3>
+        <p>These values are stored in <code>/etc/backup/global.env</code>.</p>
+      </div>
+    </header>
+    <form method="post" action="{{ url_for('save_notifications') }}" class="form-grid">
+      <div class="field"><label>Enabled</label><input name="TELEGRAM_ENABLED" value="{{ settings.TELEGRAM_ENABLED }}"></div>
+      <div class="field"><label>Chat ID</label><input name="TELEGRAM_CHAT_ID" value="{{ settings.TELEGRAM_CHAT_ID }}"></div>
+      <div class="field span-2"><label>Bot Token</label><input name="TELEGRAM_BOT_TOKEN" value="{{ settings.TELEGRAM_BOT_TOKEN }}"></div>
+      <div class="form-actions span-2">
+        <button class="btn primary" type="submit">Save Notifications</button>
+      </div>
+    </form>
+  </article>
+
+  <article class="panel">
+    <header class="panel-head">
+      <div>
+        <h3>What Orbix Notifies</h3>
+        <p>Default notification surfaces already integrated in the platform.</p>
+      </div>
+    </header>
+    <div class="stack-list">
+      <div class="stack-row plain-row"><strong>Backup start, success and failure</strong></div>
+      <div class="stack-row plain-row"><strong>Disk threshold alerts</strong></div>
+      <div class="stack-row plain-row"><strong>Manual Telegram test jobs</strong></div>
+    </div>
+  </article>
+</section>
+{% endblock %}

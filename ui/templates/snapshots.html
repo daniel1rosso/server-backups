@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% set title = "Orbix Snapshots" %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <div class="eyebrow">Snapshot Catalog</div>
+    <h2>Track exactly what each snapshot included, how much it weighed and where it lives.</h2>
+  </div>
+</section>
+
+<section class="content-grid two-up">
+  <article class="panel">
+    <header class="panel-head">
+      <div>
+        <h3>Repository Map</h3>
+        <p>Server-to-repository routing and schedules.</p>
+      </div>
+    </header>
+    <table>
+      <thead>
+        <tr>
+          <th>Server</th>
+          <th>Repository</th>
+          <th>Snapshots</th>
+          <th>Schedule</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in repo_metrics %}
+        <tr>
+          <td>{{ item.server_id }}</td>
+          <td><code>{{ item.repo_path }}</code></td>
+          <td>{{ item.snapshot_count }}</td>
+          <td>{{ item.backup_cron }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" class="empty-row">No repositories found.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </article>
+
+  <article class="panel">
+    <header class="panel-head">
+      <div>
+        <h3>Quick Restore</h3>
+        <p>Jump into the restore workflow with the selected server and snapshot.</p>
+      </div>
+    </header>
+    <div class="stack-list">
+      <a class="stack-row plain-row" href="{{ url_for('restores') }}">
+        <div>
+          <strong>Open Restore Center</strong>
+          <div class="table-subline">Select server, snapshot and target path.</div>
+        </div>
+      </a>
+    </div>
+  </article>
+</section>
+
+<section class="panel">
+  <header class="panel-head">
+    <div>
+      <h3>Catalog Runs</h3>
+      <p>Per-group history with paths, source size, stored size, files and duration.</p>
+    </div>
+  </header>
+  <table>
+    <thead>
+      <tr>
+        <th>Server</th>
+        <th>Group</th>
+        <th>Included Paths</th>
+        <th>Source Size</th>
+        <th>Stored Size</th>
+        <th>Files</th>
+        <th>Duration</th>
+        <th>Snapshot</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for run in runs %}
+      <tr>
+        <td>{{ run.server_id }}</td>
+        <td>{{ run.group_name }}</td>
+        <td>
+          {% if run.paths %}
+          {{ run.paths|join(", ") }}
+          {% else %}
+          -
+          {% endif %}
+          <div class="table-subline">{{ run.created_at }}</div>
+        </td>
+        <td>{{ run.source_size_human }}</td>
+        <td>{{ run.processed_size_human }}</td>
+        <td>{{ run.file_count or "-" }}</td>
+        <td>{{ run.duration_seconds or "-" }}s</td>
+        <td><code>{{ run.restic_short_id }}</code></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="8" class="empty-row">No catalog runs yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

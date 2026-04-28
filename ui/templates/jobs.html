@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% set title = "Orbix Jobs" %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <div class="eyebrow">Execution Timeline</div>
+    <h2>Track backups, restores, disk checks, log capture jobs and notification tests.</h2>
+  </div>
+</section>
+
+<section class="content-grid two-up">
+  <article class="panel">
+    <header class="panel-head">
+      <div>
+        <h3>Quick Actions</h3>
+        <p>Fire on-demand jobs without leaving the screen.</p>
+      </div>
+    </header>
+    <div class="action-grid">
+      <form method="post" action="{{ url_for('action_backup') }}" class="inline-form">
+        <label>Run all backups</label>
+        <button class="btn primary" type="submit">Run All</button>
+      </form>
+      <form method="post" action="{{ url_for('action_test_telegram') }}" class="inline-form">
+        <label>Test Telegram</label>
+        <button class="btn ghost" type="submit">Send Test</button>
+      </form>
+    </div>
+  </article>
+
+  <article class="panel">
+    <header class="panel-head">
+      <div>
+        <h3>Servers Available</h3>
+        <p>Profiles that can be used for scheduled or on-demand jobs.</p>
+      </div>
+    </header>
+    <div class="stack-list">
+      {% for server in servers %}
+      <div class="stack-row plain-row">
+        <div>
+          <strong>{{ server.SERVER_ID }}</strong>
+          <div class="table-subline">{{ server.display_mode }} · {{ server.schedule_summary }} · {{ server.disk_schedule_summary }}</div>
+        </div>
+      </div>
+      {% else %}
+      <div class="empty-state">No servers configured.</div>
+      {% endfor %}
+    </div>
+  </article>
+</section>
+
+<section class="panel">
+  <header class="panel-head">
+    <div>
+      <h3>Job History</h3>
+      <p>Open any job to inspect its payload, live log and exit code.</p>
+    </div>
+  </header>
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Type</th>
+        <th>Target</th>
+        <th>Status</th>
+        <th>Created</th>
+        <th>Finished</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for job in jobs %}
+      <tr>
+        <td><a href="{{ url_for('job_detail', job_id=job.id) }}"><code>{{ job.id }}</code></a></td>
+        <td>{{ job.job_type }}</td>
+        <td>{{ job.target }}</td>
+        <td><span class="badge {{ job.status }}">{{ job.status }}</span></td>
+        <td>{{ job.created_at }}</td>
+        <td>{{ job.finished_at or "-" }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="empty-row">No jobs recorded yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% set title = "Orbix Settings" %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <div class="eyebrow">Platform Settings</div>
+    <h2>Configure global retention, SFTP repository, runtime paths and shared Telegram defaults.</h2>
+  </div>
+</section>
+
+<section class="panel">
+  <form method="post" action="{{ url_for('save_settings') }}" class="form-grid">
+    <div class="field"><label>Backup Root</label><input name="BACKUP_ROOT" value="{{ settings.BACKUP_ROOT }}"></div>
+    <div class="field"><label>State Dir</label><input name="STATE_DIR" value="{{ settings.STATE_DIR }}"></div>
+    <div class="field"><label>Log Dir</label><input name="LOG_DIR" value="{{ settings.LOG_DIR }}"></div>
+    <div class="field"><label>Tmp Dir</label><input name="TMP_DIR" value="{{ settings.TMP_DIR }}"></div>
+    <div class="field"><label>Restic Password File</label><input name="RESTIC_PASSWORD_FILE" value="{{ settings.RESTIC_PASSWORD_FILE }}"></div>
+    <div class="field"><label>Daily Retention</label><input name="RESTIC_RETENTION_DAILY" value="{{ settings.RESTIC_RETENTION_DAILY }}"></div>
+    <div class="field"><label>Weekly Retention</label><input name="RESTIC_RETENTION_WEEKLY" value="{{ settings.RESTIC_RETENTION_WEEKLY }}"></div>
+    <div class="field"><label>Monthly Retention</label><input name="RESTIC_RETENTION_MONTHLY" value="{{ settings.RESTIC_RETENTION_MONTHLY }}"></div>
+    <div class="field"><label>SFTP Host</label><input name="SFTP_REPO_HOST" value="{{ settings.SFTP_REPO_HOST }}"></div>
+    <div class="field"><label>SFTP Port</label><input name="SFTP_REPO_PORT" value="{{ settings.SFTP_REPO_PORT }}"></div>
+    <div class="field"><label>SFTP User</label><input name="SFTP_REPO_USER" value="{{ settings.SFTP_REPO_USER }}"></div>
+    <div class="field"><label>SFTP Base</label><input name="SFTP_REPO_BASE" value="{{ settings.SFTP_REPO_BASE }}"></div>
+    <div class="field span-2"><label>SFTP SSH Key</label><input name="SFTP_SSH_KEY" value="{{ settings.SFTP_SSH_KEY }}"></div>
+    <div class="field span-2"><label>Restic SFTP Command</label><textarea name="RESTIC_SFTP_COMMAND">{{ settings.RESTIC_SFTP_COMMAND }}</textarea></div>
+    <div class="field"><label>Telegram Enabled</label><input name="TELEGRAM_ENABLED" value="{{ settings.TELEGRAM_ENABLED }}"></div>
+    <div class="field"><label>Telegram Chat ID</label><input name="TELEGRAM_CHAT_ID" value="{{ settings.TELEGRAM_CHAT_ID }}"></div>
+    <div class="field span-2"><label>Telegram Bot Token</label><input name="TELEGRAM_BOT_TOKEN" value="{{ settings.TELEGRAM_BOT_TOKEN }}"></div>
+    <div class="field span-2"><label>Raw Extra Env</label><textarea name="raw_extra">{{ settings.raw_extra }}</textarea></div>
+    <div class="form-actions span-2">
+      <button class="btn primary" type="submit">Save Global Settings</button>
+    </div>
+  </form>
+</section>
+
+<section class="panel">
+  <header class="panel-head">
+    <div>
+      <h3>Current Raw File</h3>
+      <p>Reference view of the active <code>global.env</code> content.</p>
+    </div>
+  </header>
+  <pre class="log-box">{{ settings.raw }}</pre>
+</section>
+{% endblock %}

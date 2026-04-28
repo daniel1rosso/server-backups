@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% set title = "Orbix Servers" %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <div class="eyebrow">Server Profiles</div>
+    <h2>Onboard local or remote hosts with schedules, paths, volumes and database dumps.</h2>
+  </div>
+  <div class="page-actions">
+    <form method="post" action="{{ url_for('action_backup') }}">
+      <button class="btn ghost" type="submit">Run All</button>
+    </form>
+  </div>
+</section>
+
+<section class="content-grid">
+  {% for server in servers %}
+  <article class="panel">
+    <header class="panel-head">
+      <div>
+        <h3>{{ server.SERVER_ID or server.filename }}</h3>
+        <p>{{ server.display_mode }} · {{ server.SOURCE_ROLE or "-" }} · {{ server.filename }}</p>
+      </div>
+      <div class="inline-actions">
+        <form method="post" action="{{ url_for('action_backup') }}">
+          <input type="hidden" name="server_filename" value="{{ server.filename }}">
+          <button class="btn primary" type="submit">Backup Now</button>
+        </form>
+        <form method="post" action="{{ url_for('action_disk_check') }}">
+          <input type="hidden" name="server_filename" value="{{ server.filename }}">
+          <button class="btn ghost" type="submit">Disk Check</button>
+        </form>
+      </div>
+    </header>
+
+    <div class="summary-grid">
+      <div><span>Repository</span><strong>{{ server.repo_path }}</strong></div>
+      <div><span>Paths</span><strong>{{ server.paths_summary }}</strong></div>
+      <div><span>Volumes</span><strong>{{ server.volumes_summary }}</strong></div>
+      <div><span>Databases</span><strong>{{ server.database_summary }}</strong></div>
+      <div><span>Backup Cron</span><strong>{{ server.schedule_summary }}</strong></div>
+      <div><span>Disk Cron</span><strong>{{ server.disk_schedule_summary }}</strong></div>
+      <div><span>Retention</span><strong>{{ server.retention_summary }}</strong></div>
+      <div><span>Mode</span><strong>{{ server.SOURCE_MODE or "-" }}</strong></div>
+    </div>
+
+    <form method="post" action="{{ url_for('save_server') }}" class="form-grid">
+      <input type="hidden" name="filename" value="{{ server.filename }}">
+      <div class="field"><label>Server ID</label><input name="SERVER_ID" value="{{ server.SERVER_ID }}"></div>
+      <div class="field"><label>Role</label><input name="SOURCE_ROLE" value="{{ server.SOURCE_ROLE }}"></div>
+      <div class="field">
+        <label>Mode</label>
+        <select name="SOURCE_MODE">
+          <option value="local" {% if server.SOURCE_MODE == "local" %}selected{% endif %}>Local</option>
+          <option value="ssh_pull" {% if server.SOURCE_MODE == "ssh_pull" %}selected{% endif %}>Remote SSH</option>
+        </select>
+      </div>
+      <div class="field"><label>Hook</label><input name="HOOK_SCRIPT" value="{{ server.HOOK_SCRIPT }}"></div>
+      <div class="field"><label>Backup Enabled</label><input name="BACKUP_ENABLED" value="{{ server.BACKUP_ENABLED or 'true' }}"></div>
+      <div class="field"><label>Backup Cron</label><input name="BACKUP_CRON" value="{{ server.BACKUP_CRON }}" placeholder="10 2 * * *"></div>
+      <div class="field"><label>Disk Check Enabled</label><input name="DISK_CHECK_ENABLED" value="{{ server.DISK_CHECK_ENABLED or 'true' }}"></div>
+      <div class="field"><label>Disk Check Cron</label><input name="DISK_CHECK_CRON" value="{{ server.DISK_CHECK_CRON }}" placeholder="*/30 * * * *"></div>
+      <div class="field"><label>Disk Threshold %</label><input name="DISK_THRESHOLD_PCT" value="{{ server.DISK_THRESHOLD_PCT }}" placeholder="85"></div>
+      <div class="field"><label>Disk Alert Targets</label><input name="DISK_ALERT_TARGETS" value="{{ server.DISK_ALERT_TARGETS }}" placeholder="/ /var/lib/docker"></div>
+      <div class="field"><label>Daily Retention</label><input name="RETENTION_DAILY" value="{{ server.RETENTION_DAILY }}"></div>
+      <div class="field"><label>Weekly Retention</label><input name="RETENTION_WEEKLY" value="{{ server.RETENTION_WEEKLY }}"></div>
+      <div class="field"><label>Monthly Retention</label><input name="RETENTION_MONTHLY" value="{{ server.RETENTION_MONTHLY }}"></div>
+      <div class="field span-2"><label>Local Host Paths</label><textarea name="HOST_PATHS">{{ server.HOST_PATHS }}</textarea></div>
+      <div class="field span-2"><label>Local Optional Paths</label><textarea name="HOST_PATHS_OPTIONAL">{{ server.HOST_PATHS_OPTIONAL }}</textarea></div>
+      <div class="field span-2"><label>Docker Volumes</label><textarea name="DOCKER_VOLUMES">{{ server.DOCKER_VOLUMES }}</textarea></div>
+      <div class="field"><label>Remote Host</label><input name="REMOTE_HOST" value="{{ server.REMOTE_HOST }}"></div>
+      <div class="field"><label>Remote Port</label><input name="REMOTE_PORT" value="{{ server.REMOTE_PORT or '22' }}"></div>
+      <div class="field"><label>Remote User</label><input name="REMOTE_USER" value="{{ server.REMOTE_USER }}"></div>
+      <div class="field"><label>Remote SSH Key</label><input name="REMOTE_SSH_KEY" value="{{ server.REMOTE_SSH_KEY }}"></div>
+      <div class="field span-2"><label>Remote Paths</label><textarea name="REMOTE_PATHS">{{ server.REMOTE_PATHS }}</textarea></div>
+      <div class="field span-2"><label>Remote Optional Paths</label><textarea name="REMOTE_PATHS_OPTIONAL">{{ server.REMOTE_PATHS_OPTIONAL }}</textarea></div>
+      <div class="field"><label>Remote System Export</label><input name="REMOTE_SYSTEM_EXPORT" value="{{ server.REMOTE_SYSTEM_EXPORT }}"></div>
+      <div class="field"><label>Remote Docker Export</label><input name="REMOTE_DOCKER_EXPORT" value="{{ server.REMOTE_DOCKER_EXPORT }}"></div>
+      <div class="field span-2"><label>Remote Docker Volumes</label><textarea name="REMOTE_DOCKER_VOLUMES">{{ server.REMOTE_DOCKER_VOLUMES }}</textarea></div>
+      <div class="field span-2"><label>Remote Pre Dump Commands</label><textarea name="REMOTE_PRE_DUMP_COMMANDS">{{ server.REMOTE_PRE_DUMP_COMMANDS }}</textarea></div>
+      <div class="field span-2"><label>Local PostgreSQL Dumps</label><textarea name="LOCAL_POSTGRES_DUMPS">{{ server.LOCAL_POSTGRES_DUMPS }}</textarea></div>
+      <div class="field span-2"><label>Local MySQL Dumps</label><textarea name="LOCAL_MYSQL_DUMPS">{{ server.LOCAL_MYSQL_DUMPS }}</textarea></div>
+      <div class="field span-2"><label>Local Mongo Dumps</label><textarea name="LOCAL_MONGO_DUMPS">{{ server.LOCAL_MONGO_DUMPS }}</textarea></div>
+      <div class="field span-2"><label>Remote PostgreSQL Dumps</label><textarea name="REMOTE_POSTGRES_DUMPS">{{ server.REMOTE_POSTGRES_DUMPS }}</textarea></div>
+      <div class="field span-2"><label>Remote MySQL Dumps</label><textarea name="REMOTE_MYSQL_DUMPS">{{ server.REMOTE_MYSQL_DUMPS }}</textarea></div>
+      <div class="field span-2"><label>Remote Mongo Dumps</label><textarea name="REMOTE_MONGO_DUMPS">{{ server.REMOTE_MONGO_DUMPS }}</textarea></div>
+      <div class="field span-2"><label>Advanced Extra Env</label><textarea name="extra_env">{{ server.extra_env }}</textarea></div>
+      <div class="form-actions span-2">
+        <button class="btn primary" type="submit">Save Profile</button>
+      </div>
+    </form>
+
+    <form class="danger-form" method="post" action="{{ url_for('delete_server') }}" onsubmit="return confirm('Delete this server profile?');">
+      <input type="hidden" name="filename" value="{{ server.filename }}">
+      <button class="btn danger" type="submit">Delete Profile</button>
+    </form>
+  </article>
+  {% else %}
+  <article class="panel empty-state">No server profiles found in <code>{{ config_dir }}/servers.d</code>.</article>
+  {% endfor %}
+</section>
+
+<section class="panel">
+  <header class="panel-head">
+    <div>
+      <h3>Create a New Server</h3>
+      <p>Use Orbix naming from day one and keep onboarding consistent for every team.</p>
+    </div>
+  </header>
+  <form method="post" action="{{ url_for('save_server') }}" class="form-grid">
+    <div class="field"><label>Filename</label><input name="filename" placeholder="orbix-new-vps.env"></div>
+    <div class="field"><label>Server ID</label><input name="SERVER_ID" placeholder="orbix-new-vps"></div>
+    <div class="field"><label>Role</label><input name="SOURCE_ROLE" placeholder="generic-remote"></div>
+    <div class="field">
+      <label>Mode</label>
+      <select name="SOURCE_MODE">
+        <option value="ssh_pull">Remote SSH</option>
+        <option value="local">Local</option>
+      </select>
+    </div>
+    <div class="field"><label>Hook</label><input name="HOOK_SCRIPT" value="hooks/pre_remote_generic.sh"></div>
+    <div class="field"><label>Backup Cron</label><input name="BACKUP_CRON" value="10 2 * * *"></div>
+    <div class="field"><label>Disk Check Cron</label><input name="DISK_CHECK_CRON" value="*/30 * * * *"></div>
+    <div class="field"><label>Remote Host</label><input name="REMOTE_HOST" placeholder="10.0.0.10"></div>
+    <div class="field"><label>Remote User</label><input name="REMOTE_USER" placeholder="root"></div>
+    <div class="field"><label>Remote SSH Key</label><input name="REMOTE_SSH_KEY" placeholder="/root/.ssh/orbix_new_vps_ed25519"></div>
+    <div class="field span-2"><label>Remote Paths</label><textarea name="REMOTE_PATHS" placeholder="/etc /srv/apps /var/www"></textarea></div>
+    <div class="field span-2"><label>Remote Docker Volumes</label><textarea name="REMOTE_DOCKER_VOLUMES" placeholder="app_data mysql_data"></textarea></div>
+    <div class="field span-2"><label>Remote PostgreSQL Dumps</label><textarea name="REMOTE_POSTGRES_DUMPS" placeholder="main|postgres-container|postgres|appdb"></textarea></div>
+    <div class="field span-2"><label>Remote MySQL Dumps</label><textarea name="REMOTE_MYSQL_DUMPS" placeholder="main|mysql-container|root|env:MYSQL_ROOT_PASSWORD|appdb"></textarea></div>
+    <div class="field span-2"><label>Remote Mongo Dumps</label><textarea name="REMOTE_MONGO_DUMPS" placeholder="main|mongo-container|appdb|mongodb://user:pass@127.0.0.1:27017/appdb"></textarea></div>
+    <div class="field span-2"><label>Advanced Extra Env</label><textarea name="extra_env" placeholder="REMOTE_PATHS_OPTIONAL=&quot;/etc/nginx /etc/letsencrypt&quot;"></textarea></div>
+    <div class="form-actions span-2">
+      <button class="btn primary" type="submit">Create Server</button>
+    </div>
+  </form>
+</section>
+{% endblock %}

@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% set title = "Orbix Logs" %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <div class="eyebrow">Operational Logs</div>
+    <h2>Inspect host, Docker, database, Nginx, Apache or Kubernetes logs from any configured server.</h2>
+  </div>
+</section>
+
+<section class="content-grid two-up">
+  <article class="panel">
+    <header class="panel-head">
+      <div>
+        <h3>Preview Logs</h3>
+        <p>Fetch logs directly over SSH or from the local host runtime.</p>
+      </div>
+    </header>
+    <form method="get" action="{{ url_for('logs_view') }}" class="form-grid">
+      <div class="field">
+        <label>Server</label>
+        <select name="server_filename">
+          {% for server in servers %}
+          <option value="{{ server.filename }}" {% if server.filename == server_filename %}selected{% endif %}>{{ server.SERVER_ID }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label>Source</label>
+        <select name="source_name">
+          {% for source in ["system", "docker", "db", "nginx", "apache", "kubernetes"] %}
+          <option value="{{ source }}" {% if source == source_name %}selected{% endif %}>{{ source }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field"><label>Target Container or Unit</label><input name="target_name" value="{{ target_name }}"></div>
+      <div class="field"><label>Lines</label><input name="lines" value="{{ lines }}"></div>
+      <div class="form-actions span-2">
+        <button class="btn primary" type="submit">Preview</button>
+      </div>
+    </form>
+  </article>
+
+  <article class="panel">
+    <header class="panel-head">
+      <div>
+        <h3>Queue Log Capture Job</h3>
+        <p>Persist the same request as a tracked Orbix job.</p>
+      </div>
+    </header>
+    <form method="post" action="{{ url_for('action_log_capture') }}" class="form-grid">
+      <input type="hidden" name="server_filename" value="{{ server_filename }}">
+      <input type="hidden" name="source_name" value="{{ source_name }}">
+      <input type="hidden" name="target_name" value="{{ target_name }}">
+      <input type="hidden" name="lines" value="{{ lines }}">
+      <div class="field span-2">
+        <label>Current Request</label>
+        <input value="{{ server_filename }} · {{ source_name }} · {{ target_name or '-' }} · {{ lines }} lines" disabled>
+      </div>
+      <div class="form-actions span-2">
+        <button class="btn ghost" type="submit">Queue Job</button>
+      </div>
+    </form>
+  </article>
+</section>
+
+<section class="panel">
+  <header class="panel-head">
+    <div>
+      <h3>Preview Output</h3>
+      <p>Exit code: {{ exit_code if exit_code is not none else "-" }}</p>
+    </div>
+  </header>
+  <pre class="log-box">{{ log_text or "No output yet." }}</pre>
+</section>
+{% endblock %}

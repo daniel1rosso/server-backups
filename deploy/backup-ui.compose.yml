@@ -1,0 +1,25 @@
+services:
+  orbix-ui:
+    build:
+      context: ..
+      dockerfile: ui/Dockerfile
+    container_name: orbix-ui
+    restart: unless-stopped
+    privileged: true
+    pid: host
+    ports:
+      - "8585:8080"
+    environment:
+      PLATFORM_ROOT: /opt/backup-platform
+      CONFIG_DIR: /etc/backup
+      BACKUP_STATE_DIR: /var/lib/backup
+      BACKUP_LOG_DIR: /var/log/backup
+      UI_STATE_DIR: /var/lib/orbix-ui
+      HOST_ENTER_MODE: nsenter
+    volumes:
+      - /opt/backup-platform:/opt/backup-platform
+      - /etc/backup:/etc/backup
+      - /var/lib/backup:/var/lib/backup
+      - /var/log/backup:/var/log/backup
+      - /var/lib/orbix-ui:/var/lib/orbix-ui
+      - /var/run/docker.sock:/var/run/docker.sock

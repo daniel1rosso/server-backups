@@ -554,6 +554,38 @@ def preview_logs(server_filename: str, source_name: str, target_name: str, lines
     return text.strip(), result.returncode
 
 
+def logs_context(server_filename: str, source_name: str, target_name: str, lines: int, exit_code: int | None) -> dict[str, Any]:
+    context: dict[str, Any] = {
+        "query_label": f"{server_filename} · {source_name} · {target_name or '-'} · {lines} lines",
+        "tips": [],
+        "available_targets": "",
+    }
+    if source_name == "docker":
+        context["tips"] = [
+            "Usá el nombre exacto del contenedor como aparece en Docker.",
+            "Si dejás vacío el target, Orbix lista los contenedores disponibles del servidor elegido.",
+            "Si el contenedor acaba de reiniciarse, repetí la consulta para refrescar la salida reciente.",
+        ]
+    elif source_name == "db":
+        context["tips"] = [
+            "Para bases en Docker, usá el nombre exacto del contenedor.",
+            "Si dejás vacío el target, Orbix lista candidatos PostgreSQL, MySQL, MariaDB, Mongo o Redis.",
+        ]
+    elif source_name in {"nginx", "apache"}:
+        context["tips"] = [
+            "Primero intenta logs del host y si no existen cae al primer contenedor coincidente.",
+        ]
+
+    if source_name in {"docker", "db"} and server_filename:
+        available_targets, available_exit = preview_logs(server_filename, source_name, "", 120)
+        if available_exit == 0:
+            context["available_targets"] = available_targets
+        if target_name and exit_code and available_targets:
+            context["tips"].insert(0, f"No se pudo resolver `{target_name}`. Probá uno de los nombres listados abajo.")
+
+    return context
+
+
 def global_env_from_form(form: Any) -> str:
     data = {key: form.get(key, "").strip() for key in GLOBAL_FIELD_KEYS}
     lines = []
@@ -671,6 +703,7 @@ def logs_view() -> str:
     exit_code = None
     if server_filename:
         log_text, exit_code = preview_logs(server_filename, source_name, target_name, lines)
+    context = logs_context(server_filename, source_name, target_name, lines, exit_code)
     return render_template(
         "logs.html",
         servers=servers,
@@ -680,6 +713,7 @@ def logs_view() -> str:
         lines=lines,
         log_text=log_text,
         exit_code=exit_code,
+        log_context=context,
     )
 
 

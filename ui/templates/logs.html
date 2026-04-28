@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_components.html" import collapsible %}
 {% set title = "Orbix Logs" %}
 {% block content %}
 <section class="page-head">
@@ -16,7 +17,7 @@
         <p>Fetch logs directly over SSH or from the local host runtime.</p>
       </div>
     </header>
-    <form method="get" action="{{ url_for('logs_view') }}" class="form-grid">
+    <form method="get" action="{{ url_for('logs_view') }}" class="form-grid" data-loading-message="Buscando logs y validando el origen seleccionado...">
       <div class="field">
         <label>Server</label>
         <select name="server_filename">
@@ -35,6 +36,10 @@
       </div>
       <div class="field"><label>Target Container or Unit</label><input name="target_name" value="{{ target_name }}"></div>
       <div class="field"><label>Lines</label><input name="lines" value="{{ lines }}"></div>
+      <div class="field span-2">
+        <label>Current Query</label>
+        <input value="{{ log_context.query_label }}" disabled>
+      </div>
       <div class="form-actions span-2">
         <button class="btn primary" type="submit">Preview</button>
       </div>
@@ -64,6 +69,36 @@
   </article>
 </section>
 
+<section class="content-grid two-up">
+  <article class="panel">
+    <header class="panel-head">
+      <div>
+        <h3>Query Guidance</h3>
+        <p>Context to help you choose the right log source and target.</p>
+      </div>
+    </header>
+    <div class="stack-list">
+      {% for tip in log_context.tips %}
+      <div class="stack-row plain-row">{{ tip }}</div>
+      {% else %}
+      <div class="empty-state">No additional guidance for this source.</div>
+      {% endfor %}
+    </div>
+  </article>
+
+  <article class="panel">
+    <header class="panel-head">
+      <div>
+        <h3>Available Targets</h3>
+        <p>Container or service candidates detected for the current source.</p>
+      </div>
+    </header>
+    <div class="log-box">
+      {{ collapsible(log_context.available_targets or "No target list available for this source. Try an empty target or another server.", lines=10, preformatted=True) }}
+    </div>
+  </article>
+</section>
+
 <section class="panel">
   <header class="panel-head">
     <div>
@@ -71,6 +106,8 @@
       <p>Exit code: {{ exit_code if exit_code is not none else "-" }}</p>
     </div>
   </header>
-  <pre class="log-box">{{ log_text or "No output yet." }}</pre>
+  <div class="log-box">
+    {{ collapsible(log_text or "No output yet.", lines=12, preformatted=True) }}
+  </div>
 </section>
 {% endblock %}

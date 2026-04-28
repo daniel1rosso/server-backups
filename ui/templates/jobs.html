@@ -25,27 +25,39 @@
         <label>Test Telegram</label>
         <button class="btn ghost" type="submit">Send Test</button>
       </form>
+      <form method="post" action="{{ url_for('action_doctor', action_name='bootstrap') }}" class="inline-form">
+        <label>Self-heal host</label>
+        <button class="btn ghost" type="submit">Bootstrap</button>
+      </form>
     </div>
   </article>
 
   <article class="panel">
     <header class="panel-head">
       <div>
-        <h3>Servers Available</h3>
-        <p>Profiles that can be used for scheduled or on-demand jobs.</p>
+        <h3>Host Readiness</h3>
+        <p>Current dependency state before you launch jobs.</p>
       </div>
     </header>
     <div class="stack-list">
-      {% for server in servers %}
       <div class="stack-row plain-row">
         <div>
-          <strong>{{ server.SERVER_ID }}</strong>
-          <div class="table-subline">{{ server.display_mode }} · {{ server.schedule_summary }} · {{ server.disk_schedule_summary }}</div>
+          <strong>Missing commands</strong>
+          <div class="table-subline">{{ doctor.missing_commands|join(", ") if doctor.missing_commands else "none" }}</div>
         </div>
       </div>
-      {% else %}
-      <div class="empty-state">No servers configured.</div>
-      {% endfor %}
+      <div class="stack-row plain-row">
+        <div>
+          <strong>Non executable files</strong>
+          <div class="table-subline">{{ doctor.nonexec_paths|join(", ") if doctor.nonexec_paths else "none" }}</div>
+        </div>
+      </div>
+      <div class="stack-row plain-row">
+        <div>
+          <strong>Missing paths</strong>
+          <div class="table-subline">{{ doctor.missing_paths|join(", ") if doctor.missing_paths else "none" }}</div>
+        </div>
+      </div>
     </div>
   </article>
 </section>

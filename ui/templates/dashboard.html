@@ -46,6 +46,58 @@
   <article class="panel">
     <header class="panel-head">
       <div>
+        <h3>Host Readiness</h3>
+        <p>Orbix validates dependencies, permissions and runtime paths on the Raspberry host.</p>
+      </div>
+      <span class="badge {{ 'done' if doctor.ok else 'failed' }}">{{ 'ready' if doctor.ok else 'needs action' }}</span>
+    </header>
+    <div class="stack-list">
+      <div class="stack-row plain-row">
+        <div>
+          <strong>Missing commands</strong>
+          <div class="table-subline">{{ doctor.missing_commands|join(", ") if doctor.missing_commands else "none" }}</div>
+        </div>
+      </div>
+      <div class="stack-row plain-row">
+        <div>
+          <strong>Missing paths</strong>
+          <div class="table-subline">{{ doctor.missing_paths|join(", ") if doctor.missing_paths else "none" }}</div>
+        </div>
+      </div>
+      <div class="stack-row plain-row">
+        <div>
+          <strong>Non executable files</strong>
+          <div class="table-subline">{{ doctor.nonexec_paths|join(", ") if doctor.nonexec_paths else "none" }}</div>
+        </div>
+      </div>
+      {% if doctor.error %}
+      <div class="stack-row plain-row">
+        <div>
+          <strong>Doctor output</strong>
+          <div class="table-subline">{{ doctor.error }}</div>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+    <div class="hero-actions top-gap">
+      <form method="post" action="{{ url_for('action_doctor', action_name='check') }}">
+        <button class="btn ghost" type="submit">Run Doctor</button>
+      </form>
+      <form method="post" action="{{ url_for('action_doctor', action_name='fix-perms') }}">
+        <button class="btn ghost" type="submit">Fix Permissions</button>
+      </form>
+      <form method="post" action="{{ url_for('action_doctor', action_name='install-missing') }}">
+        <button class="btn ghost" type="submit">Install Missing</button>
+      </form>
+      <form method="post" action="{{ url_for('action_doctor', action_name='bootstrap') }}">
+        <button class="btn primary" type="submit">Bootstrap Host</button>
+      </form>
+    </div>
+  </article>
+
+  <article class="panel">
+    <header class="panel-head">
+      <div>
         <h3>Repositories</h3>
         <p>Where Orbix stores each server history.</p>
       </div>

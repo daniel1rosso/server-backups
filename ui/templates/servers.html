@@ -13,6 +13,21 @@
   </div>
 </section>
 
+<section class="panel">
+  <header class="panel-head">
+    <div>
+      <h3>SSH Onboarding</h3>
+      <p>Flujo recomendado para agregar un VPS nuevo de forma profesional y repetible.</p>
+    </div>
+  </header>
+  <div class="summary-grid">
+    <div><span>1. Identidad</span><strong>Definí `Server ID`, rol y modo remoto SSH.</strong></div>
+    <div><span>2. Acceso</span><strong>Cargá `REMOTE_HOST`, `REMOTE_USER`, puerto y path de la key.</strong></div>
+    <div><span>3. Alcance</span><strong>Elegí rutas, volúmenes Docker y dumps de DB.</strong></div>
+    <div><span>4. Validación</span><strong>Guardá y ejecutá `Test SSH` antes del primer backup.</strong></div>
+  </div>
+</section>
+
 <section class="content-grid">
   {% for server in servers %}
   <article class="panel">
@@ -30,6 +45,12 @@
           <input type="hidden" name="server_filename" value="{{ server.filename }}">
           <button class="btn ghost" type="submit">Disk Check</button>
         </form>
+        {% if server.SOURCE_MODE == "ssh_pull" %}
+        <form method="post" action="{{ url_for('action_ssh_test') }}">
+          <input type="hidden" name="server_filename" value="{{ server.filename }}">
+          <button class="btn ghost" type="submit">Test SSH</button>
+        </form>
+        {% endif %}
       </div>
     </header>
 
@@ -121,9 +142,10 @@
     <div class="field"><label>Hook</label><input name="HOOK_SCRIPT" value="hooks/pre_remote_generic.sh"></div>
     <div class="field"><label>Backup Cron</label><input name="BACKUP_CRON" value="10 2 * * *"></div>
     <div class="field"><label>Disk Check Cron</label><input name="DISK_CHECK_CRON" value="*/30 * * * *"></div>
-    <div class="field"><label>Remote Host</label><input name="REMOTE_HOST" placeholder="10.0.0.10"></div>
-    <div class="field"><label>Remote User</label><input name="REMOTE_USER" placeholder="root"></div>
-    <div class="field"><label>Remote SSH Key</label><input name="REMOTE_SSH_KEY" placeholder="/root/.ssh/orbix_new_vps_ed25519"></div>
+      <div class="field"><label>Remote Host</label><input name="REMOTE_HOST" placeholder="10.0.0.10"></div>
+      <div class="field"><label>Remote Port</label><input name="REMOTE_PORT" value="22"></div>
+      <div class="field"><label>Remote User</label><input name="REMOTE_USER" placeholder="root"></div>
+      <div class="field"><label>Remote SSH Key</label><input name="REMOTE_SSH_KEY" placeholder="/root/.ssh/orbix_new_vps_ed25519"></div>
     <div class="field span-2"><label>Remote Paths</label><textarea name="REMOTE_PATHS" placeholder="/etc /srv/apps /var/www"></textarea></div>
     <div class="field span-2"><label>Remote Docker Volumes</label><textarea name="REMOTE_DOCKER_VOLUMES" placeholder="app_data mysql_data"></textarea></div>
     <div class="field span-2"><label>Remote PostgreSQL Dumps</label><textarea name="REMOTE_POSTGRES_DUMPS" placeholder="main|postgres-container|postgres|appdb"></textarea></div>

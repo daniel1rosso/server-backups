@@ -129,8 +129,28 @@ usage() {
 Usage:
   orbix-ops.sh disk-check <server.env>
   orbix-ops.sh logs <server.env> <source> [target] [lines]
+  orbix-ops.sh ssh-test <server.env>
   orbix-ops.sh test-telegram
 EOF
+}
+
+ssh_test() {
+  local server_file="$1"
+  load_server_env "$server_file"
+  if [[ "${SOURCE_MODE:-local}" != "ssh_pull" ]]; then
+    echo "server ${SERVER_ID:-$server_file} is not a remote SSH profile" >&2
+    return 1
+  fi
+  if [[ ! -f "${REMOTE_SSH_KEY:?missing REMOTE_SSH_KEY}" ]]; then
+    echo "missing ssh key: ${REMOTE_SSH_KEY}" >&2
+    return 1
+  fi
+  ssh -i "$REMOTE_SSH_KEY" \
+    -p "${REMOTE_PORT:-22}" \
+    -o StrictHostKeyChecking=yes \
+    -o BatchMode=yes \
+    "${REMOTE_USER:?missing REMOTE_USER}@${REMOTE_HOST:?missing REMOTE_HOST}" \
+    'printf "host=%s\nuser=%s\n" "$(hostname)" "$(whoami)"'
 }
 
 cmd="${1:-}"
@@ -140,6 +160,9 @@ case "$cmd" in
     ;;
   logs)
     run_logs "${2:?missing server env filename}" "${3:?missing source}" "${4:-}" "${5:-200}"
+    ;;
+  ssh-test)
+    ssh_test "${2:?missing server env filename}"
     ;;
   test-telegram)
     test_telegram

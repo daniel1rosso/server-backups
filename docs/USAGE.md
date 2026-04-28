@@ -35,6 +35,8 @@ El nombre del repo es `server-backups`, pero el runtime actual puede seguir mont
 - `Logs`: preview de logs de host, contenedores, DB, Nginx o Apache
 - `Notifications`: configuración Telegram
 - `Settings`: repo remoto, paths globales y retención por defecto
+- chequeo de readiness del host con `doctor`
+- prueba de conectividad SSH por perfil remoto
 
 ### Cómo levantarla
 
@@ -203,6 +205,28 @@ sudo /opt/backup-platform/scripts/orbix-ops.sh disk-check vps-production.env
 ```bash
 sudo /opt/backup-platform/scripts/orbix-ops.sh test-telegram
 ```
+
+### SSH test
+
+```bash
+sudo /opt/backup-platform/scripts/orbix-ops.sh ssh-test vps-production.env
+```
+
+### Doctor del host
+
+```bash
+sudo /opt/backup-platform/scripts/orbix-doctor.sh check
+sudo /opt/backup-platform/scripts/orbix-doctor.sh check --json
+sudo /opt/backup-platform/scripts/orbix-doctor.sh fix-perms
+sudo /opt/backup-platform/scripts/orbix-doctor.sh install-missing
+sudo /opt/backup-platform/scripts/orbix-doctor.sh bootstrap
+```
+
+`bootstrap`:
+
+- crea directorios faltantes
+- corrige permisos ejecutables
+- instala paquetes necesarios si faltan
 
 ## Qué registra cada snapshot
 

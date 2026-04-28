@@ -83,6 +83,8 @@ SERVER_FIELD_KEYS = [
     "REMOTE_MONGO_DUMPS",
 ]
 
+DOCTOR_COMMAND = f"{PLATFORM_ROOT}/scripts/orbix-doctor.sh"
+
 
 app = Flask(__name__, template_folder=str(APP_ROOT / "templates"), static_folder=str(APP_ROOT / "static"))
 
@@ -314,6 +316,32 @@ def read_ui_jobs(limit: int = 200) -> list[dict[str, Any]]:
     return [dict(row) for row in rows]
 
 
+def doctor_status() -> dict[str, Any]:
+    result = run_host_capture(f"{DOCTOR_COMMAND} check --json")
+    if result.returncode != 0:
+        return {
+            "ok": False,
+            "missing_commands": [],
+            "missing_paths": [],
+            "nonexec_paths": [],
+            "error": (result.stdout + "\n" + result.stderr).strip(),
+        }
+    try:
+        payload = json.loads(result.stdout.strip() or "{}")
+    except json.JSONDecodeError:
+        payload = {
+            "ok": False,
+            "missing_commands": [],
+            "missing_paths": [],
+            "nonexec_paths": [],
+            "error": result.stdout.strip() or result.stderr.strip() or "invalid doctor output",
+        }
+    payload.setdefault("missing_commands", [])
+    payload.setdefault("missing_paths", [])
+    payload.setdefault("nonexec_paths", [])
+    return payload
+
+
 def human_bytes(value: Any) -> str:
     try:
         size = float(value or 0)
@@ -489,6 +517,16 @@ def queue_test_telegram() -> dict[str, Any]:
     return queue_job("test-telegram", "global", command, {})
 
 
+def queue_doctor(action_name: str) -> dict[str, Any]:
+    command = f"{DOCTOR_COMMAND} {shlex.quote(action_name)}"
+    return queue_job(f"doctor-{action_name}", "host", command, {"action_name": action_name})
+
+
+def queue_ssh_test(server_filename: str) -> dict[str, Any]:
+    command = f"{PLATFORM_ROOT}/scripts/orbix-ops.sh ssh-test {shlex.quote(server_filename)}"
+    return queue_job("ssh-test", server_filename, command, {"server_filename": server_filename})
+
+
 def load_snapshot_rows() -> list[dict[str, Any]]:
     rows = read_catalog_runs(500)
     grouped: list[dict[str, Any]] = []
@@ -566,6 +604,7 @@ def dashboard() -> str:
         jobs=read_ui_jobs(10),
         runs=load_snapshot_rows()[:12],
         runner_log=read_log_tail(RUNNER_LOG),
+        doctor=doctor_status(),
     )
 
 
@@ -607,7 +646,7 @@ def restores() -> str:
 
 @app.get("/jobs")
 def jobs() -> str:
-    return render_template("jobs.html", jobs=read_ui_jobs(200), servers=load_server_envs())
+    return render_template("jobs.html", jobs=read_ui_jobs(200), servers=load_server_envs(), doctor=doctor_status())
 
 
 @app.get("/jobs/<job_id>")
@@ -726,6 +765,20 @@ def action_log_capture() -> Any:
 @app.post("/actions/test-telegram")
 def action_test_telegram() -> Any:
     job = queue_test_telegram()
+    return redirect(url_for("job_detail", job_id=job["id"]))
+
+
+@app.post("/actions/doctor/<action_name>")
+def action_doctor(action_name: str) -> Any:
+    if action_name not in {"check", "fix-perms", "install-missing", "bootstrap"}:
+        return "unsupported doctor action", 400
+    job = queue_doctor(action_name)
+    return redirect(url_for("job_detail", job_id=job["id"]))
+
+
+@app.post("/actions/ssh-test")
+def action_ssh_test() -> Any:
+    job = queue_ssh_test(request.form["server_filename"].strip())
     return redirect(url_for("job_detail", job_id=job["id"]))
 
 

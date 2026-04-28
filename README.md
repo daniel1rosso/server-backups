@@ -26,6 +26,8 @@ Orbix ya soporta:
 - UI web en Docker
 - jobs manuales de backup, restore, disk-check y captura de logs
 - scheduling por cron declarativo por servidor
+- doctor del host para dependencias, permisos y paths
+- test SSH por perfil remoto
 
 ## Estructura
 
@@ -75,6 +77,9 @@ La UI permite:
 - revisar qué incluye cada snapshot
 - ver logs operativos del host o contenedores
 - testear Telegram
+- detectar dependencias faltantes y corregir permisos
+- bootstrap del host para autocuración básica
+- validar perfiles SSH antes del primer backup
 
 ## Branding
 

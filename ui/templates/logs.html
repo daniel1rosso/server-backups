@@ -54,7 +54,7 @@
         <p>Persist the same request as a tracked Orbix job.</p>
       </div>
     </header>
-    <form method="post" action="{{ url_for('action_log_capture') }}" class="form-grid">
+    <form method="post" action="{{ url_for('action_log_capture') }}" class="form-grid" data-async-loading-message="Orbix está encolando la captura de logs..." data-async-loading-text="Lanzando...">
       <input type="hidden" name="server_filename" value="{{ server_filename }}">
       <input type="hidden" name="source_name" value="{{ source_name }}">
       <input type="hidden" name="target_name" value="{{ target_name }}">
@@ -66,6 +66,7 @@
       <div class="form-actions span-2">
         <button class="btn ghost" type="submit">Queue Job</button>
       </div>
+      <p class="loading-status span-2" data-loading-status hidden></p>
     </form>
   </article>
 </section>

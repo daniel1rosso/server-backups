@@ -9,8 +9,9 @@
   </div>
   <div class="page-actions">
     <button class="btn primary" type="button" data-modal-open="new-server-modal">New Server</button>
-    <form method="post" action="{{ url_for('action_backup') }}">
+    <form method="post" action="{{ url_for('action_backup') }}" data-async-loading-message="Orbix está lanzando todos los backups..." data-async-loading-text="Lanzando...">
       <button class="btn ghost" type="submit">Run All</button>
+      <p class="loading-status" data-loading-status hidden></p>
     </form>
   </div>
 </section>
@@ -39,18 +40,21 @@
         <p>{{ server.display_mode }} · {{ server.SOURCE_ROLE or "-" }} · {{ server.filename }}</p>
       </div>
       <div class="inline-actions server-actions">
-        <form method="post" action="{{ url_for('action_backup') }}">
+        <form method="post" action="{{ url_for('action_backup') }}" data-async-loading-message="Orbix está lanzando el backup del server..." data-async-loading-text="Lanzando...">
           <input type="hidden" name="server_filename" value="{{ server.filename }}">
           <button class="btn primary" type="submit">Backup Now</button>
+          <p class="loading-status" data-loading-status hidden></p>
         </form>
-        <form method="post" action="{{ url_for('action_disk_check') }}">
+        <form method="post" action="{{ url_for('action_disk_check') }}" data-async-loading-message="Orbix está lanzando el chequeo de disco..." data-async-loading-text="Lanzando...">
           <input type="hidden" name="server_filename" value="{{ server.filename }}">
           <button class="btn ghost" type="submit">Disk Check</button>
+          <p class="loading-status" data-loading-status hidden></p>
         </form>
         {% if server.SOURCE_MODE == "ssh_pull" %}
-        <form method="post" action="{{ url_for('action_ssh_test') }}">
+        <form method="post" action="{{ url_for('action_ssh_test') }}" data-async-loading-message="Orbix está lanzando la prueba SSH..." data-async-loading-text="Lanzando...">
           <input type="hidden" name="server_filename" value="{{ server.filename }}">
           <button class="btn ghost" type="submit">Test SSH</button>
+          <p class="loading-status" data-loading-status hidden></p>
         </form>
         {% endif %}
         <button

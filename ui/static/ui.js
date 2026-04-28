@@ -137,13 +137,16 @@
       form.dataset.loadingBound = "true";
       form.addEventListener("submit", () => {
         const action = form.getAttribute("action") || "";
-        if (form.dataset.skipLoading === "true" || action.startsWith("/actions/")) return;
+        const asyncAction = action.startsWith("/actions/");
+        if (form.dataset.skipLoading === "true") return;
         form.classList.add("is-submitting");
 
         const statusEl = form.querySelector("[data-loading-status]");
         if (statusEl instanceof HTMLElement) {
           statusEl.hidden = false;
-          statusEl.textContent = form.dataset.loadingMessage || "Orbix está procesando la solicitud...";
+          statusEl.textContent = asyncAction
+            ? form.dataset.asyncLoadingMessage || "Orbix está lanzando la acción..."
+            : form.dataset.loadingMessage || "Orbix está procesando la solicitud...";
         }
 
         form.querySelectorAll('button[type="submit"]').forEach((button) => {
@@ -154,7 +157,9 @@
           button.disabled = true;
           button.classList.add("is-loading");
           button.setAttribute("aria-busy", "true");
-          button.textContent = button.dataset.loadingText || "Cargando...";
+          button.textContent = asyncAction
+            ? form.dataset.asyncLoadingText || button.dataset.asyncText || "Lanzando..."
+            : form.dataset.loadingText || "Cargando...";
         });
       });
     });

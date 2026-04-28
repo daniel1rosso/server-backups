@@ -9,8 +9,9 @@
     <p>Each server can be backed up over SSH, with per-host paths, Docker volumes, PostgreSQL, MySQL or MongoDB dumps, retention policies and Telegram alerts.</p>
   </div>
   <div class="hero-actions">
-    <form method="post" action="{{ url_for('action_backup') }}">
+    <form method="post" action="{{ url_for('action_backup') }}" data-async-loading-message="Orbix está lanzando todos los backups..." data-async-loading-text="Lanzando...">
       <button class="btn primary" type="submit">Run All Backups</button>
+      <p class="loading-status" data-loading-status hidden></p>
     </form>
     <a class="btn ghost" href="{{ url_for('servers') }}">Manage Servers</a>
   </div>
@@ -81,17 +82,21 @@
       {% endif %}
     </div>
     <div class="hero-actions top-gap">
-      <form method="post" action="{{ url_for('action_doctor', action_name='check') }}">
+      <form method="post" action="{{ url_for('action_doctor', action_name='check') }}" data-async-loading-message="Orbix está ejecutando el diagnóstico..." data-async-loading-text="Lanzando...">
         <button class="btn ghost" type="submit">Run Doctor</button>
+        <p class="loading-status" data-loading-status hidden></p>
       </form>
-      <form method="post" action="{{ url_for('action_doctor', action_name='fix-perms') }}">
+      <form method="post" action="{{ url_for('action_doctor', action_name='fix-perms') }}" data-async-loading-message="Orbix está corrigiendo permisos..." data-async-loading-text="Lanzando...">
         <button class="btn ghost" type="submit">Fix Permissions</button>
+        <p class="loading-status" data-loading-status hidden></p>
       </form>
-      <form method="post" action="{{ url_for('action_doctor', action_name='install-missing') }}">
+      <form method="post" action="{{ url_for('action_doctor', action_name='install-missing') }}" data-async-loading-message="Orbix está instalando dependencias faltantes..." data-async-loading-text="Lanzando...">
         <button class="btn ghost" type="submit">Install Missing</button>
+        <p class="loading-status" data-loading-status hidden></p>
       </form>
-      <form method="post" action="{{ url_for('action_doctor', action_name='bootstrap') }}">
+      <form method="post" action="{{ url_for('action_doctor', action_name='bootstrap') }}" data-async-loading-message="Orbix está lanzando el bootstrap del host..." data-async-loading-text="Lanzando...">
         <button class="btn primary" type="submit">Bootstrap Host</button>
+        <p class="loading-status" data-loading-status hidden></p>
       </form>
     </div>
   </article>

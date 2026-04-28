@@ -8,8 +8,9 @@
     <h2>Manage Telegram settings used by backups, disk alerts and test notifications.</h2>
   </div>
   <div class="page-actions">
-    <form method="post" action="{{ url_for('action_test_telegram') }}">
+    <form method="post" action="{{ url_for('action_test_telegram') }}" data-async-loading-message="Orbix está enviando la notificación de prueba..." data-async-loading-text="Lanzando...">
       <button class="btn ghost" type="submit">Send Test Notification</button>
+      <p class="loading-status" data-loading-status hidden></p>
     </form>
   </div>
 </section>

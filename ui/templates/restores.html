@@ -17,7 +17,7 @@
         <p>Pick server, snapshot ID and target directory.</p>
       </div>
     </header>
-    <form method="post" action="{{ url_for('action_restore') }}" class="form-grid">
+    <form method="post" action="{{ url_for('action_restore') }}" class="form-grid" data-async-loading-message="Orbix está encolando el restore..." data-async-loading-text="Lanzando...">
       <div class="field">
         <label>Server</label>
         <select name="server_id">
@@ -31,6 +31,7 @@
       <div class="form-actions span-2">
         <button class="btn primary" type="submit">Queue Restore</button>
       </div>
+      <p class="loading-status span-2" data-loading-status hidden></p>
     </form>
   </article>
 

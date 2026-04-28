@@ -17,7 +17,7 @@
         <p>Fetch logs directly over SSH or from the local host runtime.</p>
       </div>
     </header>
-    <form method="get" action="{{ url_for('logs_view') }}" class="form-grid" data-loading-message="Buscando logs y validando el origen seleccionado..." data-loading-text="Buscando...">
+    <form method="get" action="{{ url_for('logs_view') }}" class="form-grid" data-action-kind="logs">
       <div class="field">
         <label>Server</label>
         <select name="server_filename">
@@ -41,7 +41,7 @@
         <input value="{{ log_context.query_label }}" disabled>
       </div>
       <div class="form-actions span-2">
-        <button class="btn primary" type="submit">Preview</button>
+        <button class="btn primary has-action-mark action-logs" type="submit">Preview</button>
       </div>
       <p class="loading-status span-2" data-loading-status hidden></p>
     </form>
@@ -54,7 +54,7 @@
         <p>Persist the same request as a tracked Orbix job.</p>
       </div>
     </header>
-    <form method="post" action="{{ url_for('action_log_capture') }}" class="form-grid" data-async-loading-message="Orbix está encolando la captura de logs..." data-async-loading-text="Lanzando...">
+    <form method="post" action="{{ url_for('action_log_capture') }}" class="form-grid" data-action-kind="logs">
       <input type="hidden" name="server_filename" value="{{ server_filename }}">
       <input type="hidden" name="source_name" value="{{ source_name }}">
       <input type="hidden" name="target_name" value="{{ target_name }}">
@@ -64,7 +64,7 @@
         <input value="{{ server_filename }} · {{ source_name }} · {{ target_name or '-' }} · {{ lines }} lines" disabled>
       </div>
       <div class="form-actions span-2">
-        <button class="btn ghost" type="submit">Queue Job</button>
+        <button class="btn ghost has-action-mark action-logs" type="submit">Queue Job</button>
       </div>
       <p class="loading-status span-2" data-loading-status hidden></p>
     </form>

@@ -9,8 +9,8 @@
   </div>
   <div class="page-actions">
     <button class="btn primary" type="button" data-modal-open="new-server-modal">New Server</button>
-    <form method="post" action="{{ url_for('action_backup') }}" data-async-loading-message="Orbix está lanzando todos los backups..." data-async-loading-text="Lanzando...">
-      <button class="btn ghost" type="submit">Run All</button>
+    <form method="post" action="{{ url_for('action_backup') }}" data-action-kind="backup">
+      <button class="btn ghost has-action-mark action-backup" type="submit">Run All</button>
       <p class="loading-status" data-loading-status hidden></p>
     </form>
   </div>
@@ -40,20 +40,20 @@
         <p>{{ server.display_mode }} · {{ server.SOURCE_ROLE or "-" }} · {{ server.filename }}</p>
       </div>
       <div class="inline-actions server-actions">
-        <form method="post" action="{{ url_for('action_backup') }}" data-async-loading-message="Orbix está lanzando el backup del server..." data-async-loading-text="Lanzando...">
+        <form method="post" action="{{ url_for('action_backup') }}" data-action-kind="backup">
           <input type="hidden" name="server_filename" value="{{ server.filename }}">
-          <button class="btn primary" type="submit">Backup Now</button>
+          <button class="btn primary has-action-mark action-backup" type="submit">Backup Now</button>
           <p class="loading-status" data-loading-status hidden></p>
         </form>
-        <form method="post" action="{{ url_for('action_disk_check') }}" data-async-loading-message="Orbix está lanzando el chequeo de disco..." data-async-loading-text="Lanzando...">
+        <form method="post" action="{{ url_for('action_disk_check') }}" data-action-kind="disk">
           <input type="hidden" name="server_filename" value="{{ server.filename }}">
-          <button class="btn ghost" type="submit">Disk Check</button>
+          <button class="btn ghost has-action-mark action-disk" type="submit">Disk Check</button>
           <p class="loading-status" data-loading-status hidden></p>
         </form>
         {% if server.SOURCE_MODE == "ssh_pull" %}
-        <form method="post" action="{{ url_for('action_ssh_test') }}" data-async-loading-message="Orbix está lanzando la prueba SSH..." data-async-loading-text="Lanzando...">
+        <form method="post" action="{{ url_for('action_ssh_test') }}" data-action-kind="ssh">
           <input type="hidden" name="server_filename" value="{{ server.filename }}">
-          <button class="btn ghost" type="submit">Test SSH</button>
+          <button class="btn ghost has-action-mark action-ssh" type="submit">Test SSH</button>
           <p class="loading-status" data-loading-status hidden></p>
         </form>
         {% endif %}
@@ -83,7 +83,7 @@
 
     <div class="server-admin" id="server-admin-{{ loop.index }}" hidden>
       <div class="panel-divider"></div>
-      <form method="post" action="{{ url_for('save_server') }}" class="form-grid" data-loading-message="Guardando configuración del server..." data-loading-text="Guardando...">
+      <form method="post" action="{{ url_for('save_server') }}" class="form-grid" data-action-kind="server">
         <input type="hidden" name="filename" value="{{ server.filename }}">
         <div class="field"><label>Server ID</label><input name="SERVER_ID" value="{{ server.SERVER_ID }}"></div>
         <div class="field"><label>Role</label><input name="SOURCE_ROLE" value="{{ server.SOURCE_ROLE }}"></div>
@@ -125,7 +125,7 @@
         <div class="field span-2"><label>Remote Mongo Dumps</label><textarea name="REMOTE_MONGO_DUMPS">{{ server.REMOTE_MONGO_DUMPS }}</textarea></div>
         <div class="field span-2"><label>Advanced Extra Env</label><textarea name="extra_env">{{ server.extra_env }}</textarea></div>
         <div class="form-actions span-2">
-          <button class="btn primary" type="submit">Save Profile</button>
+          <button class="btn primary has-action-mark action-server" type="submit">Save Profile</button>
         </div>
         <p class="loading-status span-2" data-loading-status hidden></p>
       </form>
@@ -150,7 +150,7 @@
       </div>
       <button class="btn ghost modal-close" type="button" data-modal-close>Cerrar</button>
     </header>
-    <form method="post" action="{{ url_for('save_server') }}" class="form-grid" data-loading-message="Creando nuevo server..." data-loading-text="Creando...">
+    <form method="post" action="{{ url_for('save_server') }}" class="form-grid" data-action-kind="server-create">
       <div class="field"><label>Filename</label><input name="filename" placeholder="orbix-new-vps.env"></div>
       <div class="field"><label>Server ID</label><input name="SERVER_ID" placeholder="orbix-new-vps"></div>
       <div class="field"><label>Role</label><input name="SOURCE_ROLE" placeholder="generic-remote"></div>
@@ -175,7 +175,7 @@
       <div class="field span-2"><label>Remote Mongo Dumps</label><textarea name="REMOTE_MONGO_DUMPS" placeholder="main|mongo-container|appdb|mongodb://user:pass@127.0.0.1:27017/appdb"></textarea></div>
       <div class="field span-2"><label>Advanced Extra Env</label><textarea name="extra_env" placeholder="REMOTE_PATHS_OPTIONAL=&quot;/etc/nginx /etc/letsencrypt&quot;"></textarea></div>
       <div class="form-actions span-2">
-        <button class="btn primary" type="submit">Create Server</button>
+        <button class="btn primary has-action-mark action-create" type="submit">Create Server</button>
       </div>
       <p class="loading-status span-2" data-loading-status hidden></p>
     </form>

@@ -18,19 +18,19 @@
       </div>
     </header>
     <div class="action-grid">
-      <form method="post" action="{{ url_for('action_backup') }}" class="inline-form" data-async-loading-message="Orbix está lanzando todos los backups..." data-async-loading-text="Lanzando...">
+      <form method="post" action="{{ url_for('action_backup') }}" class="inline-form" data-action-kind="backup">
         <label>Run all backups</label>
-        <button class="btn primary" type="submit">Run All</button>
+        <button class="btn primary has-action-mark action-backup" type="submit">Run All</button>
         <p class="loading-status" data-loading-status hidden></p>
       </form>
-      <form method="post" action="{{ url_for('action_test_telegram') }}" class="inline-form" data-async-loading-message="Orbix está enviando la prueba de Telegram..." data-async-loading-text="Lanzando...">
+      <form method="post" action="{{ url_for('action_test_telegram') }}" class="inline-form" data-action-kind="telegram">
         <label>Test Telegram</label>
-        <button class="btn ghost" type="submit">Send Test</button>
+        <button class="btn ghost has-action-mark action-telegram" type="submit">Send Test</button>
         <p class="loading-status" data-loading-status hidden></p>
       </form>
-      <form method="post" action="{{ url_for('action_doctor', action_name='bootstrap') }}" class="inline-form" data-async-loading-message="Orbix está lanzando la autocuración del host..." data-async-loading-text="Lanzando...">
+      <form method="post" action="{{ url_for('action_doctor', action_name='bootstrap') }}" class="inline-form" data-action-kind="doctor">
         <label>Self-heal host</label>
-        <button class="btn ghost" type="submit">Bootstrap</button>
+        <button class="btn ghost has-action-mark action-doctor" type="submit">Bootstrap</button>
         <p class="loading-status" data-loading-status hidden></p>
       </form>
     </div>

@@ -1,4 +1,51 @@
 (() => {
+  const ACTION_LABELS = {
+    backup: {
+      loadingText: "Lanzando backup...",
+      loadingMessage: "Orbix está lanzando el backup.",
+    },
+    restore: {
+      loadingText: "Lanzando restore...",
+      loadingMessage: "Orbix está encolando el restore.",
+    },
+    logs: {
+      loadingText: "Buscando logs...",
+      loadingMessage: "Orbix está consultando logs y validando el origen.",
+    },
+    settings: {
+      loadingText: "Guardando...",
+      loadingMessage: "Orbix está guardando la configuración.",
+    },
+    notifications: {
+      loadingText: "Guardando...",
+      loadingMessage: "Orbix está guardando las notificaciones.",
+    },
+    doctor: {
+      loadingText: "Lanzando diagnóstico...",
+      loadingMessage: "Orbix está lanzando una acción de mantenimiento.",
+    },
+    ssh: {
+      loadingText: "Probando SSH...",
+      loadingMessage: "Orbix está lanzando la validación SSH.",
+    },
+    telegram: {
+      loadingText: "Enviando prueba...",
+      loadingMessage: "Orbix está enviando la prueba de Telegram.",
+    },
+    disk: {
+      loadingText: "Chequeando disco...",
+      loadingMessage: "Orbix está lanzando el chequeo de disco.",
+    },
+    server: {
+      loadingText: "Guardando server...",
+      loadingMessage: "Orbix está guardando la configuración del server.",
+    },
+  "server-create": {
+      loadingText: "Creando server...",
+      loadingMessage: "Orbix está creando el nuevo server.",
+    },
+  };
+
   const measureExpandedHeight = (body) => {
     const clone = body.cloneNode(true);
     clone.style.position = "absolute";
@@ -138,6 +185,8 @@
       form.addEventListener("submit", () => {
         const action = form.getAttribute("action") || "";
         const asyncAction = action.startsWith("/actions/");
+        const kind = form.dataset.actionKind || "";
+        const labels = ACTION_LABELS[kind] || null;
         if (form.dataset.skipLoading === "true") return;
         form.classList.add("is-submitting");
 
@@ -145,8 +194,8 @@
         if (statusEl instanceof HTMLElement) {
           statusEl.hidden = false;
           statusEl.textContent = asyncAction
-            ? form.dataset.asyncLoadingMessage || "Orbix está lanzando la acción..."
-            : form.dataset.loadingMessage || "Orbix está procesando la solicitud...";
+            ? form.dataset.asyncLoadingMessage || labels?.loadingMessage || "Orbix está lanzando la acción..."
+            : form.dataset.loadingMessage || labels?.loadingMessage || "Orbix está procesando la solicitud...";
         }
 
         form.querySelectorAll('button[type="submit"]').forEach((button) => {
@@ -158,8 +207,8 @@
           button.classList.add("is-loading");
           button.setAttribute("aria-busy", "true");
           button.textContent = asyncAction
-            ? form.dataset.asyncLoadingText || button.dataset.asyncText || "Lanzando..."
-            : form.dataset.loadingText || "Cargando...";
+            ? form.dataset.asyncLoadingText || button.dataset.asyncText || labels?.loadingText || "Lanzando..."
+            : form.dataset.loadingText || labels?.loadingText || "Cargando...";
         });
       });
     });

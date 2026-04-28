@@ -10,7 +10,7 @@
 </section>
 
 <section class="panel">
-  <form method="post" action="{{ url_for('save_settings') }}" class="form-grid" data-loading-message="Guardando configuración global..." data-loading-text="Guardando...">
+  <form method="post" action="{{ url_for('save_settings') }}" class="form-grid" data-action-kind="settings">
     <div class="field"><label>Backup Root</label><input name="BACKUP_ROOT" value="{{ settings.BACKUP_ROOT }}"></div>
     <div class="field"><label>State Dir</label><input name="STATE_DIR" value="{{ settings.STATE_DIR }}"></div>
     <div class="field"><label>Log Dir</label><input name="LOG_DIR" value="{{ settings.LOG_DIR }}"></div>
@@ -30,7 +30,7 @@
     <div class="field span-2"><label>Telegram Bot Token</label><input name="TELEGRAM_BOT_TOKEN" value="{{ settings.TELEGRAM_BOT_TOKEN }}"></div>
     <div class="field span-2"><label>Raw Extra Env</label><textarea name="raw_extra">{{ settings.raw_extra }}</textarea></div>
     <div class="form-actions span-2">
-      <button class="btn primary" type="submit">Save Global Settings</button>
+      <button class="btn primary has-action-mark action-settings" type="submit">Save Global Settings</button>
     </div>
     <p class="loading-status span-2" data-loading-status hidden></p>
   </form>

@@ -514,6 +514,20 @@ input:disabled {
   transition: transform 140ms ease, border-color 140ms ease, filter 140ms ease;
 }
 
+.btn.has-action-mark {
+  gap: 10px;
+}
+
+.btn.has-action-mark::before {
+  content: "";
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+  background: rgba(255, 255, 255, 0.4);
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.06);
+}
+
 .btn:hover,
 .btn:focus-visible {
   transform: translateY(-1px);
@@ -535,6 +549,31 @@ input:disabled {
   color: #ffe3e4;
   background: rgba(255, 143, 147, 0.18);
   border-color: rgba(255, 143, 147, 0.24);
+}
+
+.btn.action-backup::before,
+.btn.action-restore::before {
+  background: linear-gradient(135deg, var(--green), #8affd4);
+}
+
+.btn.action-logs::before,
+.btn.action-ssh::before,
+.btn.action-settings::before {
+  background: linear-gradient(135deg, var(--sky), #b9f0ff);
+}
+
+.btn.action-disk::before,
+.btn.action-doctor::before {
+  background: linear-gradient(135deg, var(--warning), #fff0a8);
+}
+
+.btn.action-telegram::before {
+  background: linear-gradient(135deg, #7ae8ff, #7ea6ff);
+}
+
+.btn.action-server::before,
+.btn.action-create::before {
+  background: linear-gradient(135deg, #91ffd9, var(--green));
 }
 
 .badge {
@@ -750,6 +789,10 @@ input:disabled {
   position: relative;
   color: transparent !important;
   pointer-events: none;
+}
+
+.btn.is-loading::before {
+  opacity: 0;
 }
 
 .btn.is-loading::after {

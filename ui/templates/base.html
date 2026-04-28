@@ -4,29 +4,35 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ title or platform_name }}</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='orbix-favicon.svg') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
   </head>
   <body>
-    <div class="app-shell">
+    <div class="app-shell" data-app-shell>
       <aside class="sidebar">
-        <div class="brand-card">
-          <div class="brand-mark">O</div>
-          <div>
-            <div class="eyebrow">Orbix Platform</div>
-            <h1>{{ platform_name }}</h1>
-            <p>Backups, restores, schedules, notifications and operational logs for every host managed by SSH.</p>
+        <div class="sidebar-top">
+          <div class="brand-card">
+            <div class="brand-mark">
+              <img src="{{ url_for('static', filename='orbix-logo.svg') }}" alt="Orbix logo">
+            </div>
+            <div>
+              <div class="eyebrow">Orbix Platform</div>
+              <h1>{{ platform_name }}</h1>
+              <p>Backups, restores, schedules, notifications and operational logs for every host managed by SSH.</p>
+            </div>
           </div>
+          <button class="nav-close" type="button" data-nav-close aria-label="Cerrar menú">Cerrar</button>
         </div>
 
-        <nav class="nav">
-          <a href="{{ url_for('dashboard') }}">Dashboard</a>
-          <a href="{{ url_for('servers') }}">Servers</a>
-          <a href="{{ url_for('snapshots') }}">Snapshots</a>
-          <a href="{{ url_for('restores') }}">Restores</a>
-          <a href="{{ url_for('jobs') }}">Jobs</a>
-          <a href="{{ url_for('logs_view') }}">Logs</a>
-          <a href="{{ url_for('notifications') }}">Notifications</a>
-          <a href="{{ url_for('settings') }}">Settings</a>
+        <nav class="nav" aria-label="Primary navigation">
+          <a class="{% if request.endpoint == 'dashboard' %}is-active{% endif %}" href="{{ url_for('dashboard') }}">Dashboard</a>
+          <a class="{% if request.endpoint == 'servers' %}is-active{% endif %}" href="{{ url_for('servers') }}">Servers</a>
+          <a class="{% if request.endpoint == 'snapshots' %}is-active{% endif %}" href="{{ url_for('snapshots') }}">Snapshots</a>
+          <a class="{% if request.endpoint == 'restores' %}is-active{% endif %}" href="{{ url_for('restores') }}">Restores</a>
+          <a class="{% if request.endpoint == 'jobs' or request.endpoint == 'job_detail' %}is-active{% endif %}" href="{{ url_for('jobs') }}">Jobs</a>
+          <a class="{% if request.endpoint == 'logs_view' %}is-active{% endif %}" href="{{ url_for('logs_view') }}">Logs</a>
+          <a class="{% if request.endpoint == 'notifications' %}is-active{% endif %}" href="{{ url_for('notifications') }}">Notifications</a>
+          <a class="{% if request.endpoint == 'settings' %}is-active{% endif %}" href="{{ url_for('settings') }}">Settings</a>
         </nav>
 
         <div class="meta-panel">
@@ -45,9 +51,28 @@
         </div>
       </aside>
 
+      <div class="sidebar-backdrop"></div>
+
       <main class="main">
+        <header class="topbar">
+          <div>
+            <div class="eyebrow">Orbix Control Center</div>
+            <p>Responsive operational console for backups, restores and host observability.</p>
+          </div>
+          <button class="nav-toggle" type="button" data-nav-toggle aria-label="Abrir menú" aria-expanded="false">
+            Menú
+          </button>
+        </header>
         {% block content %}{% endblock %}
       </main>
     </div>
+    <div class="loading-overlay" data-loading-overlay hidden>
+      <div class="loading-card" role="status" aria-live="polite">
+        <div class="spinner" aria-hidden="true"></div>
+        <strong>Procesando acción</strong>
+        <p>Orbix está trabajando. Esto puede tardar unos segundos.</p>
+      </div>
+    </div>
+    <script src="{{ url_for('static', filename='ui.js') }}"></script>
   </body>
 </html>

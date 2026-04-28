@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_components.html" import collapsible %}
 {% set title = "Orbix Settings" %}
 {% block content %}
 <section class="page-head">
@@ -41,6 +42,8 @@
       <p>Reference view of the active <code>global.env</code> content.</p>
     </div>
   </header>
-  <pre class="log-box">{{ settings.raw }}</pre>
+  <div class="log-box">
+    {{ collapsible(settings.raw, lines=12, preformatted=True) }}
+  </div>
 </section>
 {% endblock %}

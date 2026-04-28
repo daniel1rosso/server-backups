@@ -1,0 +1,15 @@
+{% macro collapsible(content, lines=5, class_name="", preformatted=False) -%}
+  {% set text = content if content is not none else "" %}
+  <div class="collapsible {{ class_name }}" data-collapsible data-lines="{{ lines }}">
+    <div class="collapsible-body{% if preformatted %} is-preformatted{% endif %}" data-collapsible-body>{{ text }}</div>
+    <button
+      class="collapsible-toggle"
+      type="button"
+      hidden
+      data-collapsible-toggle
+      aria-expanded="false"
+    >
+      Ver más
+    </button>
+  </div>
+{%- endmacro %}

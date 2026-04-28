@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_components.html" import collapsible %}
 {% set title = "Orbix Jobs" %}
 {% block content %}
 <section class="page-head">
@@ -69,31 +70,33 @@
       <p>Open any job to inspect its payload, live log and exit code.</p>
     </div>
   </header>
-  <table>
-    <thead>
-      <tr>
-        <th>ID</th>
-        <th>Type</th>
-        <th>Target</th>
-        <th>Status</th>
-        <th>Created</th>
-        <th>Finished</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for job in jobs %}
-      <tr>
-        <td><a href="{{ url_for('job_detail', job_id=job.id) }}"><code>{{ job.id }}</code></a></td>
-        <td>{{ job.job_type }}</td>
-        <td>{{ job.target }}</td>
-        <td><span class="badge {{ job.status }}">{{ job.status }}</span></td>
-        <td>{{ job.created_at }}</td>
-        <td>{{ job.finished_at or "-" }}</td>
-      </tr>
-      {% else %}
-      <tr><td colspan="6" class="empty-row">No jobs recorded yet.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <div class="table-wrap is-stacked-mobile">
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Type</th>
+          <th>Target</th>
+          <th>Status</th>
+          <th>Created</th>
+          <th>Finished</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for job in jobs %}
+        <tr>
+          <td data-label="ID"><a href="{{ url_for('job_detail', job_id=job.id) }}"><code>{{ job.id }}</code></a></td>
+          <td data-label="Type">{{ job.job_type }}</td>
+          <td data-label="Target">{{ collapsible(job.target) }}</td>
+          <td data-label="Status"><span class="badge {{ job.status }}">{{ job.status }}</span></td>
+          <td data-label="Created">{{ job.created_at }}</td>
+          <td data-label="Finished">{{ job.finished_at or "-" }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="empty-row">No jobs recorded yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </section>
 {% endblock %}

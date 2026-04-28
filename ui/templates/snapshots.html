@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_components.html" import collapsible %}
 {% set title = "Orbix Snapshots" %}
 {% block content %}
 <section class="page-head">
@@ -16,28 +17,30 @@
         <p>Server-to-repository routing and schedules.</p>
       </div>
     </header>
-    <table>
-      <thead>
-        <tr>
-          <th>Server</th>
-          <th>Repository</th>
-          <th>Snapshots</th>
-          <th>Schedule</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for item in repo_metrics %}
-        <tr>
-          <td>{{ item.server_id }}</td>
-          <td><code>{{ item.repo_path }}</code></td>
-          <td>{{ item.snapshot_count }}</td>
-          <td>{{ item.backup_cron }}</td>
-        </tr>
-        {% else %}
-        <tr><td colspan="4" class="empty-row">No repositories found.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
+    <div class="table-wrap is-stacked-mobile">
+      <table>
+        <thead>
+          <tr>
+            <th>Server</th>
+            <th>Repository</th>
+            <th>Snapshots</th>
+            <th>Schedule</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in repo_metrics %}
+          <tr>
+            <td data-label="Server">{{ item.server_id }}</td>
+            <td data-label="Repository">{{ collapsible(item.repo_path, class_name="code-content") }}</td>
+            <td data-label="Snapshots">{{ item.snapshot_count }}</td>
+            <td data-label="Schedule">{{ item.backup_cron }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4" class="empty-row">No repositories found.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   </article>
 
   <article class="panel">
@@ -65,42 +68,44 @@
       <p>Per-group history with paths, source size, stored size, files and duration.</p>
     </div>
   </header>
-  <table>
-    <thead>
-      <tr>
-        <th>Server</th>
-        <th>Group</th>
-        <th>Included Paths</th>
-        <th>Source Size</th>
-        <th>Stored Size</th>
-        <th>Files</th>
-        <th>Duration</th>
-        <th>Snapshot</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for run in runs %}
-      <tr>
-        <td>{{ run.server_id }}</td>
-        <td>{{ run.group_name }}</td>
-        <td>
-          {% if run.paths %}
-          {{ run.paths|join(", ") }}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Server</th>
+            <th>Group</th>
+            <th>Included Paths</th>
+            <th>Source Size</th>
+            <th>Stored Size</th>
+            <th>Files</th>
+            <th>Duration</th>
+            <th>Snapshot</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for run in runs %}
+          <tr>
+            <td data-label="Server">{{ run.server_id }}</td>
+            <td data-label="Group">{{ run.group_name }}</td>
+            <td data-label="Included Paths">
+              {% if run.paths %}
+              {{ collapsible(run.paths|join(", ")) }}
+              {% else %}
+              -
+              {% endif %}
+              <div class="table-subline">{{ run.created_at }}</div>
+            </td>
+            <td data-label="Source Size">{{ run.source_size_human }}</td>
+            <td data-label="Stored Size">{{ run.processed_size_human }}</td>
+            <td data-label="Files">{{ run.file_count or "-" }}</td>
+            <td data-label="Duration">{{ run.duration_seconds or "-" }}s</td>
+            <td data-label="Snapshot"><code>{{ run.restic_short_id }}</code></td>
+          </tr>
           {% else %}
-          -
-          {% endif %}
-          <div class="table-subline">{{ run.created_at }}</div>
-        </td>
-        <td>{{ run.source_size_human }}</td>
-        <td>{{ run.processed_size_human }}</td>
-        <td>{{ run.file_count or "-" }}</td>
-        <td>{{ run.duration_seconds or "-" }}s</td>
-        <td><code>{{ run.restic_short_id }}</code></td>
-      </tr>
-      {% else %}
-      <tr><td colspan="8" class="empty-row">No catalog runs yet.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</section>
+          <tr><td colspan="8" class="empty-row">No catalog runs yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
 {% endblock %}

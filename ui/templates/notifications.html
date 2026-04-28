@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_components.html" import collapsible %}
 {% set title = "Orbix Notifications" %}
 {% block content %}
 <section class="page-head">
@@ -39,9 +40,9 @@
       </div>
     </header>
     <div class="stack-list">
-      <div class="stack-row plain-row"><strong>Backup start, success and failure</strong></div>
-      <div class="stack-row plain-row"><strong>Disk threshold alerts</strong></div>
-      <div class="stack-row plain-row"><strong>Manual Telegram test jobs</strong></div>
+      <div class="stack-row plain-row">{{ collapsible("Backup start, success and failure", class_name="summary-copy") }}</div>
+      <div class="stack-row plain-row">{{ collapsible("Disk threshold alerts", class_name="summary-copy") }}</div>
+      <div class="stack-row plain-row">{{ collapsible("Manual Telegram test jobs", class_name="summary-copy") }}</div>
     </div>
   </article>
 </section>

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_components.html" import collapsible %}
 {% set title = "Orbix Job Detail" %}
 {% block content %}
 <section class="page-head">
@@ -24,9 +25,9 @@
       <div><span>Started</span><strong>{{ job.started_at or "-" }}</strong></div>
       <div><span>Finished</span><strong>{{ job.finished_at or "-" }}</strong></div>
       <div><span>Exit Code</span><strong>{{ job.exit_code if job.exit_code is not none else "-" }}</strong></div>
-      <div class="span-2"><span>Command</span><strong><code>{{ job.command }}</code></strong></div>
-      <div class="span-2"><span>Log Path</span><strong><code>{{ job.log_path }}</code></strong></div>
-      <div class="span-2"><span>Payload</span><strong><code>{{ job.payload_json }}</code></strong></div>
+      <div class="span-2"><span>Command</span>{{ collapsible(job.command, class_name="code-content summary-copy") }}</div>
+      <div class="span-2"><span>Log Path</span>{{ collapsible(job.log_path, class_name="code-content summary-copy") }}</div>
+      <div class="span-2"><span>Payload</span>{{ collapsible(job.payload_json, class_name="code-content", preformatted=True) }}</div>
     </div>
   </article>
 
@@ -37,7 +38,7 @@
         <p>Refreshes automatically while the job remains queued or running.</p>
       </div>
     </header>
-    <pre class="log-box" id="job-log">{{ log_text }}</pre>
+    <div class="log-box" id="job-log">{{ collapsible(log_text, lines=12, preformatted=True) }}</div>
   </article>
 </section>
 
@@ -50,7 +51,18 @@
     const res = await fetch({{ url_for('job_json', job_id=job.id)|tojson }});
     if (!res.ok) return;
     const data = await res.json();
-    logEl.textContent = data.log_tail || "";
+    logEl.innerHTML = "";
+    const wrapper = document.createElement("div");
+    wrapper.className = "collapsible";
+    wrapper.dataset.collapsible = "";
+    wrapper.dataset.lines = "12";
+    wrapper.innerHTML = `
+      <div class="collapsible-body is-preformatted" data-collapsible-body></div>
+      <button class="collapsible-toggle" type="button" hidden data-collapsible-toggle aria-expanded="false">Ver más</button>
+    `;
+    wrapper.querySelector("[data-collapsible-body]").textContent = data.log_tail || "";
+    logEl.appendChild(wrapper);
+    window.OrbixUI?.initCollapsibles(logEl);
     if (["queued", "running"].includes(data.status)) {
       setTimeout(poll, 5000);
     } else {

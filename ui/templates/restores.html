@@ -5,7 +5,8 @@
 <section class="page-head">
   <div>
     <div class="eyebrow">Restore Center</div>
-    <h2>Restore any server snapshot to a staging path or final destination with traceable source metadata.</h2>
+    <h2>Run full restores or recover only the exact paths you need from a snapshot.</h2>
+    <p>Orbix now separates full snapshot restores from partial restores and keeps staging as the default safe path.</p>
   </div>
 </section>
 
@@ -14,20 +15,113 @@
     <header class="panel-head">
       <div>
         <h3>Queue Restore</h3>
-        <p>Pick server, snapshot ID and target directory.</p>
+        <p>Choose the server, snapshot and restore scope before launching the job.</p>
       </div>
     </header>
-    <form method="post" action="{{ url_for('action_restore') }}" class="form-grid" data-action-kind="restore">
+    {% if restore_errors %}
+    <div class="notice danger">
+      <strong>Restore blocked</strong>
+      <ul class="notice-list">
+        {% for error in restore_errors %}
+        <li>{{ error }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+    <form method="post" action="{{ url_for('action_restore') }}" class="form-grid" data-action-kind="restore" data-restore-form>
       <div class="field">
         <label>Server</label>
-        <select name="server_id">
-          {% for server in servers %}
-          <option value="{{ server.SERVER_ID }}">{{ server.SERVER_ID }}</option>
+        <select name="server_id" data-restore-server>
+          {% for item in restore_catalog %}
+          <option value="{{ item.server_id }}" {% if restore_form.server_id == item.server_id %}selected{% endif %}>
+            {{ item.server_id }}{% if item.snapshot_count %} · {{ item.snapshot_count }} snapshots{% endif %}
+          </option>
           {% endfor %}
         </select>
       </div>
-      <div class="field"><label>Snapshot ID</label><input name="snapshot_id" placeholder="52d4215e"></div>
-      <div class="field span-2"><label>Target Directory</label><input name="target_dir" placeholder="/var/tmp/restore-server-id"></div>
+      <div class="field">
+        <label>Snapshot</label>
+        <select name="snapshot_id" data-restore-snapshot>
+          {% for item in restore_catalog %}
+            {% for snap in item.choices %}
+            <option
+              value="{{ snap.short_id }}"
+              data-server-id="{{ item.server_id }}"
+              data-target-suggestion="{{ snap.target_suggestion }}"
+              {% if restore_form.snapshot_id == snap.short_id %}selected{% endif %}
+            >
+              {{ item.server_id }} · {{ snap.label }}
+            </option>
+            {% endfor %}
+          {% endfor %}
+        </select>
+        <p class="field-note" data-snapshot-empty-note hidden>No indexed snapshots for this server.</p>
+      </div>
+
+      <div class="field">
+        <label>Restore Strategy</label>
+        <select name="strategy" data-restore-strategy>
+          <option value="staging" {% if restore_form.strategy == "staging" %}selected{% endif %}>Staging</option>
+          <option value="direct" {% if restore_form.strategy == "direct" %}selected{% endif %}>Direct</option>
+        </select>
+        <p class="field-note">`staging` limita el target a paths seguros. `direct` queda para casos excepcionales.</p>
+      </div>
+      <div class="field">
+        <label>Restore Scope</label>
+        <select name="restore_scope" data-restore-scope>
+          <option value="full" {% if restore_form.restore_scope == "full" %}selected{% endif %}>Full snapshot</option>
+          <option value="partial" {% if restore_form.restore_scope == "partial" %}selected{% endif %}>Partial paths only</option>
+        </select>
+        <p class="field-note">Usá `partial` cuando necesitás recuperar sólo una carpeta, dump o archivo puntual.</p>
+      </div>
+
+      <div class="field span-2">
+        <label>Target Directory</label>
+        <input
+          name="target_dir"
+          value="{{ restore_form.target_dir }}"
+          placeholder="/var/tmp/orbix-restore/server-id/snapshot-id"
+          data-restore-target
+        >
+        <p class="field-note">Safe roots: {{ safe_restore_prefixes|join(", ") }}</p>
+      </div>
+
+      <div class="field span-2" data-partial-only {% if restore_form.restore_scope != "partial" %}hidden{% endif %}>
+        <label>Snapshot Subpath</label>
+        <input
+          name="snapshot_subpath"
+          value="{{ restore_form.snapshot_subpath }}"
+          placeholder="/volumes/postgres or /db-dumps"
+        >
+        <p class="field-note">Se traduce al formato `snapshot:/subpath` de restic.</p>
+      </div>
+
+      <div class="field span-2" data-partial-only {% if restore_form.restore_scope != "partial" %}hidden{% endif %}>
+        <label>Include Paths</label>
+        <textarea
+          name="include_paths"
+          placeholder="/db-dumps/app.sql&#10;/volumes/redis/dump.rdb"
+        >{{ restore_form.include_paths }}</textarea>
+        <p class="field-note">Un path por línea. Orbix los pasa como `--include` a `restic restore`.</p>
+      </div>
+
+      <div class="field span-2" data-direct-only {% if restore_form.strategy != "direct" %}hidden{% endif %}>
+        <label class="checkbox-line">
+          <input type="checkbox" name="confirm_direct" value="yes" {% if restore_form.confirm_direct == "yes" %}checked{% endif %}>
+          <span>Confirmo que no quiero staging y que entiendo el riesgo operativo de restaurar directo.</span>
+        </label>
+      </div>
+
+      <div class="field span-2">
+        <label>Operator Notes</label>
+        <textarea name="notes" placeholder="Qué necesito recuperar y cómo lo voy a validar después.">{{ restore_form.notes }}</textarea>
+      </div>
+
+      <div class="notice warning span-2">
+        <strong>Recommended flow</strong>
+        <p>Primero staging, después validar contenido, y recién ahí promover manualmente al destino final si corresponde.</p>
+      </div>
+
       <div class="form-actions span-2">
         <button class="btn primary has-action-mark action-restore" type="submit">Queue Restore</button>
       </div>
@@ -38,20 +132,19 @@
   <article class="panel">
     <header class="panel-head">
       <div>
-        <h3>Available Snapshot IDs</h3>
-        <p>Quick reference from the latest JSON index generated by the runner.</p>
+        <h3>Indexed Snapshots</h3>
+        <p>Latest snapshot index generated by the backup runner for each configured server.</p>
       </div>
     </header>
-      <div class="stack-list">
-      {% for server in servers %}
+    <div class="stack-list">
+      {% for item in restore_catalog %}
       <div class="stack-row plain-row">
         <div>
-          <strong>{{ server.SERVER_ID }}</strong>
-          {{ collapsible(server.repo_path, class_name="table-subline") }}
-          {% set items = snapshots.get(server.SERVER_ID, []) %}
+          <strong>{{ item.server_id }}</strong>
+          {{ collapsible(item.repo_path, class_name="table-subline") }}
           <div class="chip-row">
-            {% for snap in items[:6] %}
-            <span class="chip"><code>{{ snap.short_id or snap.id[:8] }}</code></span>
+            {% for snap in item.choices[:6] %}
+            <span class="chip"><code>{{ snap.short_id }}</code></span>
             {% else %}
             <span class="table-subline">No indexed snapshots.</span>
             {% endfor %}
@@ -97,4 +190,90 @@
     </table>
   </div>
 </section>
+
+<script>
+(() => {
+  const form = document.querySelector("[data-restore-form]");
+  if (!(form instanceof HTMLFormElement)) return;
+
+  const serverSelect = form.querySelector("[data-restore-server]");
+  const snapshotSelect = form.querySelector("[data-restore-snapshot]");
+  const strategySelect = form.querySelector("[data-restore-strategy]");
+  const scopeSelect = form.querySelector("[data-restore-scope]");
+  const targetInput = form.querySelector("[data-restore-target]");
+  const emptyNote = form.querySelector("[data-snapshot-empty-note]");
+  const partialRows = [...form.querySelectorAll("[data-partial-only]")];
+  const directRows = [...form.querySelectorAll("[data-direct-only]")];
+
+  if (!(serverSelect instanceof HTMLSelectElement) || !(snapshotSelect instanceof HTMLSelectElement) || !(strategySelect instanceof HTMLSelectElement) || !(scopeSelect instanceof HTMLSelectElement) || !(targetInput instanceof HTMLInputElement)) {
+    return;
+  }
+
+  let targetTouched = false;
+
+  const syncSnapshotOptions = () => {
+    const serverId = serverSelect.value;
+    const options = [...snapshotSelect.options];
+    let firstVisible = null;
+    let currentVisible = false;
+
+    options.forEach((option) => {
+      const visible = option.dataset.serverId === serverId;
+      option.hidden = !visible;
+      option.disabled = !visible;
+      if (visible && firstVisible === null) firstVisible = option;
+      if (visible && option.selected) currentVisible = true;
+    });
+
+    if (!currentVisible && firstVisible) {
+      firstVisible.selected = true;
+    }
+
+    if (emptyNote instanceof HTMLElement) {
+      emptyNote.hidden = Boolean(firstVisible);
+    }
+  };
+
+  const syncTargetSuggestion = () => {
+    const selected = snapshotSelect.selectedOptions[0];
+    if (!(selected instanceof HTMLOptionElement)) return;
+    const suggestion = selected.dataset.targetSuggestion || "";
+    targetInput.placeholder = suggestion || "/var/tmp/orbix-restore/server-id/snapshot-id";
+    if (!targetTouched || !targetInput.value.trim()) {
+      targetInput.value = suggestion;
+      targetTouched = false;
+    }
+  };
+
+  const syncScopeRows = () => {
+    const isPartial = scopeSelect.value === "partial";
+    partialRows.forEach((row) => {
+      if (row instanceof HTMLElement) row.hidden = !isPartial;
+    });
+  };
+
+  const syncStrategyRows = () => {
+    const isDirect = strategySelect.value === "direct";
+    directRows.forEach((row) => {
+      if (row instanceof HTMLElement) row.hidden = !isDirect;
+    });
+  };
+
+  targetInput.addEventListener("input", () => {
+    targetTouched = true;
+  });
+  serverSelect.addEventListener("change", () => {
+    syncSnapshotOptions();
+    syncTargetSuggestion();
+  });
+  snapshotSelect.addEventListener("change", syncTargetSuggestion);
+  scopeSelect.addEventListener("change", syncScopeRows);
+  strategySelect.addEventListener("change", syncStrategyRows);
+
+  syncSnapshotOptions();
+  syncTargetSuggestion();
+  syncScopeRows();
+  syncStrategyRows();
+})();
+</script>
 {% endblock %}

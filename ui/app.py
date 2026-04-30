@@ -27,6 +27,7 @@ UI_DB = UI_STATE_DIR / "ui.sqlite3"
 UI_JOBS_DIR = UI_STATE_DIR / "jobs"
 HOST_ENTER_MODE = os.environ.get("HOST_ENTER_MODE", "nsenter")
 RUNNER_LOG = BACKUP_LOG_DIR / f"backup-runner-{datetime.now().strftime('%F')}.log"
+SAFE_RESTORE_PREFIXES = ("/var/tmp/orbix-restore/", "/tmp/orbix-restore/", "/srv/orbix-restore/")
 
 GLOBAL_FIELD_KEYS = [
     "BACKUP_ROOT",
@@ -306,6 +307,203 @@ def read_snapshot_index() -> dict[str, Any]:
     return result
 
 
+def suggest_restore_target(server_id: str, snapshot_id: str) -> str:
+    snapshot_token = (snapshot_id or "latest").strip().replace("/", "-")[:24] or "latest"
+    return f"/var/tmp/orbix-restore/{server_id}/{snapshot_token}"
+
+
+def snapshot_choices(server_id: str, snapshots: dict[str, Any]) -> list[dict[str, Any]]:
+    items = snapshots.get(server_id, []) or []
+    choices: list[dict[str, Any]] = []
+    for item in items:
+        snapshot_id = str(item.get("id") or "").strip()
+        short_id = str(item.get("short_id") or snapshot_id[:8]).strip()
+        if not snapshot_id:
+            continue
+        paths = item.get("paths") or []
+        paths_count = len(paths) if isinstance(paths, list) else 0
+        created_at = str(item.get("time") or item.get("created_at") or "").strip()
+        hostname = str(item.get("hostname") or "").strip()
+        label_bits = [short_id]
+        if created_at:
+            label_bits.append(created_at.replace("T", " ")[:19])
+        if hostname:
+            label_bits.append(hostname)
+        if paths_count:
+            label_bits.append(f"{paths_count} paths")
+        choices.append(
+            {
+                "id": snapshot_id,
+                "short_id": short_id,
+                "created_at": created_at,
+                "hostname": hostname,
+                "paths_count": paths_count,
+                "label": " · ".join(label_bits),
+                "target_suggestion": suggest_restore_target(server_id, short_id),
+            }
+        )
+    return choices
+
+
+def restore_catalog() -> list[dict[str, Any]]:
+    snapshots = read_snapshot_index()
+    catalog: list[dict[str, Any]] = []
+    for server in load_server_envs():
+        server_id = server["SERVER_ID"]
+        catalog.append(
+            {
+                "server_id": server_id,
+                "repo_path": server["repo_path"],
+                "snapshot_count": len(snapshots.get(server_id, [])),
+                "choices": snapshot_choices(server_id, snapshots),
+            }
+        )
+    return catalog
+
+
+def restore_form_state(form: Any | None = None) -> dict[str, str]:
+    strategy = (form.get("strategy", "staging").strip() if form else "staging") or "staging"
+    return {
+        "server_id": form.get("server_id", "").strip() if form else "",
+        "snapshot_id": form.get("snapshot_id", "").strip() if form else "",
+        "target_dir": form.get("target_dir", "").strip() if form else "",
+        "strategy": strategy if strategy in {"staging", "direct"} else "staging",
+        "restore_scope": (form.get("restore_scope", "full").strip() if form else "full") or "full",
+        "snapshot_subpath": form.get("snapshot_subpath", "").strip() if form else "",
+        "include_paths": form.get("include_paths", "").strip() if form else "",
+        "confirm_direct": form.get("confirm_direct", "").strip() if form else "",
+        "notes": form.get("notes", "").strip() if form else "",
+    }
+
+
+def normalize_target_dir(target_dir: str) -> str:
+    normalized = os.path.normpath((target_dir or "").strip())
+    if normalized == ".":
+        return ""
+    return normalized
+
+
+def parse_multiline_paths(text: str) -> list[str]:
+    items: list[str] = []
+    for raw_line in (text or "").splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        items.append(line)
+    return items
+
+
+def validate_restore_request(form: Any) -> tuple[dict[str, str], list[str], dict[str, Any] | None]:
+    state = restore_form_state(form)
+    errors: list[str] = []
+    catalog = {item["server_id"]: item for item in restore_catalog()}
+    server_id = state["server_id"]
+    strategy = state["strategy"]
+    restore_scope = state["restore_scope"] if state["restore_scope"] in {"full", "partial"} else "full"
+    state["restore_scope"] = restore_scope
+
+    if not server_id:
+        errors.append("Elegí un server para restaurar.")
+        return state, errors, None
+
+    server_entry = catalog.get(server_id)
+    if server_entry is None:
+        errors.append("El server elegido no existe en la configuración actual.")
+        return state, errors, None
+
+    choices = server_entry["choices"]
+    snapshot_map: dict[str, dict[str, Any]] = {}
+    for choice in choices:
+        snapshot_map[choice["id"]] = choice
+        snapshot_map[choice["short_id"]] = choice
+
+    snapshot_key = state["snapshot_id"]
+    snapshot = snapshot_map.get(snapshot_key)
+    if snapshot is None:
+        errors.append("El snapshot elegido no existe en el índice actual de Orbix para ese server.")
+
+    target_dir = normalize_target_dir(state["target_dir"])
+    if not target_dir and snapshot is not None:
+        target_dir = snapshot["target_suggestion"]
+        state["target_dir"] = target_dir
+
+    if not target_dir:
+        errors.append("Indicá un target directory absoluto.")
+    elif not target_dir.startswith("/"):
+        errors.append("El target directory debe ser una ruta absoluta del host.")
+    elif target_dir == "/":
+        errors.append("No se puede restaurar sobre `/`.")
+
+    if target_dir and strategy == "staging" and not any(target_dir.startswith(prefix) for prefix in SAFE_RESTORE_PREFIXES):
+        errors.append("El modo staging sólo permite restores bajo `/var/tmp/orbix-restore`, `/tmp/orbix-restore` o `/srv/orbix-restore`.")
+
+    if strategy == "direct" and state["confirm_direct"] != "yes":
+        errors.append("El modo direct requiere confirmación explícita antes de ejecutar el restore.")
+
+    if target_dir and strategy == "direct" and any(target_dir.startswith(prefix) for prefix in SAFE_RESTORE_PREFIXES):
+        errors.append("El modo direct requiere un target final; si querés staging usá el modo staging.")
+
+    snapshot_subpath = normalize_target_dir(state["snapshot_subpath"])
+    include_paths = parse_multiline_paths(state["include_paths"])
+    state["snapshot_subpath"] = snapshot_subpath
+    if snapshot_subpath and not snapshot_subpath.startswith("/"):
+        errors.append("El subpath dentro del snapshot debe empezar con `/`.")
+    for include_path in include_paths:
+        if not include_path.startswith("/"):
+            errors.append("Cada include path debe empezar con `/` tal como aparece dentro del snapshot.")
+            break
+    if restore_scope == "partial" and not snapshot_subpath and not include_paths:
+        errors.append("El modo partial requiere al menos un include path o un subpath dentro del snapshot.")
+
+    if snapshot is None or errors:
+        return state, errors, None
+
+    payload = {
+        "server_id": server_id,
+        "snapshot_id": snapshot["id"],
+        "snapshot_short_id": snapshot["short_id"],
+        "snapshot_created_at": snapshot["created_at"],
+        "target_dir": target_dir,
+        "strategy": strategy,
+        "restore_scope": restore_scope,
+        "snapshot_subpath": snapshot_subpath,
+        "include_paths": include_paths,
+        "confirm_direct": state["confirm_direct"] == "yes",
+        "notes": state["notes"],
+    }
+    return state, errors, payload
+
+
+def render_restore_page(form: dict[str, str] | None = None, errors: list[str] | None = None, status_code: int = 200) -> tuple[str, int] | str:
+    catalog = restore_catalog()
+    restore_jobs = [job for job in read_ui_jobs(100) if job["job_type"] == "restore"]
+    if not form and catalog:
+        first_server = catalog[0]
+        first_choice = first_server["choices"][0] if first_server["choices"] else None
+        form = {
+            "server_id": first_server["server_id"],
+            "snapshot_id": first_choice["short_id"] if first_choice else "",
+            "target_dir": first_choice["target_suggestion"] if first_choice else suggest_restore_target(first_server["server_id"], "latest"),
+            "strategy": "staging",
+            "restore_scope": "full",
+            "snapshot_subpath": "",
+            "include_paths": "",
+            "confirm_direct": "",
+            "notes": "",
+        }
+    rendered = render_template(
+        "restores.html",
+        restore_catalog=catalog,
+        restore_jobs=restore_jobs,
+        restore_form=form or restore_form_state(),
+        restore_errors=errors or [],
+        safe_restore_prefixes=SAFE_RESTORE_PREFIXES,
+    )
+    if status_code != 200:
+        return rendered, status_code
+    return rendered
+
+
 def read_ui_jobs(limit: int = 200) -> list[dict[str, Any]]:
     conn = db_conn()
     rows = conn.execute(
@@ -487,6 +685,20 @@ def queue_restore(server_id: str, snapshot_id: str, target_dir: str) -> dict[str
         command,
         {"server_id": server_id, "snapshot_id": snapshot_id, "target_dir": target_dir},
     )
+
+
+def queue_restore_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    restore_ref = payload["snapshot_id"]
+    if payload.get("snapshot_subpath"):
+        restore_ref = f"{restore_ref}:{payload['snapshot_subpath']}"
+    command = (
+        f"{PLATFORM_ROOT}/scripts/backup-restore-helper.sh restore "
+        f"{shlex.quote(payload['server_id'])} {shlex.quote(restore_ref)} {shlex.quote(payload['target_dir'])}"
+    )
+    for include_path in payload.get("include_paths", []):
+        command += f" --include {shlex.quote(include_path)}"
+    target = f"{payload['server_id']} -> {payload['target_dir']}"
+    return queue_job("restore", target, command, payload)
 
 
 def queue_disk_check(server_filename: str) -> dict[str, Any]:
@@ -672,8 +884,7 @@ def snapshots() -> str:
 
 @app.get("/restores")
 def restores() -> str:
-    restore_jobs = [job for job in read_ui_jobs(100) if job["job_type"] == "restore"]
-    return render_template("restores.html", servers=load_server_envs(), restore_jobs=restore_jobs, snapshots=read_snapshot_index())
+    return render_restore_page()
 
 
 @app.get("/jobs")
@@ -771,11 +982,10 @@ def action_backup() -> Any:
 
 @app.post("/actions/restore")
 def action_restore() -> Any:
-    job = queue_restore(
-        request.form["server_id"].strip(),
-        request.form["snapshot_id"].strip(),
-        request.form["target_dir"].strip(),
-    )
+    form_state, errors, payload = validate_restore_request(request.form)
+    if errors or payload is None:
+        return render_restore_page(form=form_state, errors=errors, status_code=400)
+    job = queue_restore_payload(payload)
     return redirect(url_for("job_detail", job_id=job["id"]))
 
 

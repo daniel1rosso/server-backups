@@ -21,14 +21,41 @@ sudo /opt/backup-platform/scripts/backup-restore-helper.sh snapshots rpi-house
 sudo /opt/backup-platform/scripts/backup-restore-helper.sh restore rpi-house <snapshot_id> /var/tmp/restore-rpi-house
 ```
 
+## Restore parcial
+
+Recuperar sólo una parte del snapshot a staging:
+
+```bash
+sudo /opt/backup-platform/scripts/backup-restore-helper.sh restore \
+  rpi-house <snapshot_id> /var/tmp/orbix-restore/rpi-house/db \
+  --include /db-dumps/app.sql
+```
+
+Recuperar un subárbol completo del snapshot:
+
+```bash
+sudo /opt/backup-platform/scripts/backup-restore-helper.sh restore \
+  rpi-house <snapshot_id>:/volumes/postgres /var/tmp/orbix-restore/rpi-house/postgres
+```
+
+Listar contenido antes de restaurar:
+
+```bash
+sudo /opt/backup-platform/scripts/backup-restore-helper.sh ls rpi-house <snapshot_id>
+sudo /opt/backup-platform/scripts/backup-restore-helper.sh ls rpi-house <snapshot_id> /db-dumps
+```
+
 ## Desde la UI
 
 1. ir a `Restores`
 2. elegir servidor
 3. elegir snapshot
-4. indicar target path
-5. ejecutar restore
-6. seguir el job desde `Jobs`
+4. elegir `staging` o `direct`
+5. elegir `full snapshot` o `partial paths only`
+6. si es parcial, indicar `snapshot subpath` y/o `include paths`
+7. indicar target path
+8. ejecutar restore
+9. seguir el job desde `Jobs`
 
 ## Casos típicos
 
@@ -59,5 +86,7 @@ sudo /opt/backup-platform/scripts/backup-restore-helper.sh restore rpi-house <sn
 - servidor correcto
 - snapshot correcto
 - target path correcto
+- si necesitás restore completo o parcial
+- si conocés el path exacto dentro del snapshot
 - si el restore va a staging o producción
 - si hay downtime planificado para la app afectada

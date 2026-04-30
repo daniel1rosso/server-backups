@@ -457,6 +457,19 @@ tbody tr:hover td {
   min-width: 0;
 }
 
+.checkbox-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  color: var(--muted-strong);
+  font-weight: 600;
+}
+
+.checkbox-line input {
+  width: auto;
+  margin-top: 3px;
+}
+
 .field label,
 .inline-form label {
   display: block;
@@ -486,6 +499,39 @@ select {
 textarea {
   min-height: 124px;
   resize: vertical;
+}
+
+.notice {
+  margin-bottom: 18px;
+  padding: 16px 18px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.notice strong {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.notice p {
+  margin: 0;
+}
+
+.notice.warning {
+  border-color: rgba(255, 216, 119, 0.28);
+  background: rgba(255, 216, 119, 0.08);
+}
+
+.notice.danger {
+  border-color: rgba(255, 143, 147, 0.28);
+  background: rgba(255, 143, 147, 0.08);
+}
+
+.notice-list {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: var(--muted-strong);
 }
 
 input:focus-visible,

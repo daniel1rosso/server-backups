@@ -36,11 +36,15 @@
       loadingText: "Chequeando disco...",
       loadingMessage: "Orbix está lanzando el chequeo de disco.",
     },
+    resource: {
+      loadingText: "Chequeando CPU/RAM...",
+      loadingMessage: "Orbix está lanzando el escaneo de CPU y RAM.",
+    },
     server: {
       loadingText: "Guardando server...",
       loadingMessage: "Orbix está guardando la configuración del server.",
     },
-  "server-create": {
+    "server-create": {
       loadingText: "Creando server...",
       loadingMessage: "Orbix está creando el nuevo server.",
     },

@@ -638,6 +638,7 @@ input:disabled {
 }
 
 .btn.action-disk::before,
+.btn.action-resource::before,
 .btn.action-doctor::before {
   background: linear-gradient(135deg, var(--warning), #fff0a8);
 }

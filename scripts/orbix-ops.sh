@@ -119,6 +119,14 @@ write_metric_state() {
   printf '%s\n' "$current_state" >"${state_dir}/${metric_name}.state"
 }
 
+write_metric_value() {
+  local state_dir="$1"
+  local metric_name="$2"
+  local current_value="$3"
+  mkdir -p "$state_dir"
+  printf '%s\n' "$current_value" >"${state_dir}/${metric_name}.value"
+}
+
 read_metric_state() {
   local state_dir="$1"
   local metric_name="$2"
@@ -212,6 +220,9 @@ run_resource_check() {
 
   write_metric_state "$state_dir" "cpu" "$cpu_current_state"
   write_metric_state "$state_dir" "ram" "$ram_current_state"
+  write_metric_value "$state_dir" "cpu" "$cpu_pct"
+  write_metric_value "$state_dir" "ram" "$ram_pct"
+  printf '%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"${state_dir}/checked_at"
   printf '%b' "$summary"
 
   if [[ "$cpu_current_state" == "critical" && "$cpu_previous_state" != "critical" ]]; then

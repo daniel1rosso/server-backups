@@ -5,7 +5,7 @@
 <section class="page-head">
   <div>
     <div class="eyebrow">Execution Timeline</div>
-    <h2>Track backups, restores, disk checks, log capture jobs and notification tests.</h2>
+    <h2>Track backups, restores, disk checks, resource scans, log capture jobs and notification tests.</h2>
   </div>
 </section>
 
@@ -26,6 +26,16 @@
       <form method="post" action="{{ url_for('action_test_telegram') }}" class="inline-form" data-action-kind="telegram">
         <label>Test Telegram</label>
         <button class="btn ghost has-action-mark action-telegram" type="submit">Send Test</button>
+        <p class="loading-status" data-loading-status hidden></p>
+      </form>
+      <form method="post" action="{{ url_for('action_resource_check') }}" class="inline-form" data-action-kind="resource">
+        <label>CPU/RAM scan</label>
+        <select name="server_filename" {% if not servers %}disabled{% endif %}>
+          {% for server in servers %}
+          <option value="{{ server.filename }}">{{ server.SERVER_ID or server.filename }}</option>
+          {% endfor %}
+        </select>
+        <button class="btn ghost has-action-mark action-resource" type="submit" {% if not servers %}disabled{% endif %}>Run Scan</button>
         <p class="loading-status" data-loading-status hidden></p>
       </form>
       <form method="post" action="{{ url_for('action_doctor', action_name='bootstrap') }}" class="inline-form" data-action-kind="doctor">

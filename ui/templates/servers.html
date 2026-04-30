@@ -50,6 +50,11 @@
           <button class="btn ghost has-action-mark action-disk" type="submit">Disk Check</button>
           <p class="loading-status" data-loading-status hidden></p>
         </form>
+        <form method="post" action="{{ url_for('action_resource_check') }}" data-action-kind="resource">
+          <input type="hidden" name="server_filename" value="{{ server.filename }}">
+          <button class="btn ghost has-action-mark action-resource" type="submit">CPU/RAM Check</button>
+          <p class="loading-status" data-loading-status hidden></p>
+        </form>
         {% if server.SOURCE_MODE == "ssh_pull" %}
         <form method="post" action="{{ url_for('action_ssh_test') }}" data-action-kind="ssh">
           <input type="hidden" name="server_filename" value="{{ server.filename }}">

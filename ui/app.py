@@ -821,6 +821,45 @@ def metrics_summary() -> dict[str, Any]:
     }
 
 
+def read_resource_snapshot(server: dict[str, Any]) -> dict[str, Any]:
+    server_id = server.get("SERVER_ID", "")
+    enabled = env_truthy(server.get("RESOURCE_CHECK_ENABLED"), default=False)
+    state_dir = BACKUP_STATE_DIR / "resource-check" / server_id
+    cpu_state = read_text(state_dir / "cpu.state").strip() or "unknown"
+    ram_state = read_text(state_dir / "ram.state").strip() or "unknown"
+    cpu_value = read_text(state_dir / "cpu.value").strip()
+    ram_value = read_text(state_dir / "ram.value").strip()
+    checked_at = read_text(state_dir / "checked_at").strip() or None
+
+    def parse_pct(raw: str) -> int | None:
+        if not raw:
+            return None
+        try:
+            return int(raw)
+        except ValueError:
+            return None
+
+    cpu_pct = parse_pct(cpu_value)
+    ram_pct = parse_pct(ram_value)
+    has_data = cpu_pct is not None or ram_pct is not None or checked_at is not None
+    overall_state = "unknown"
+    if cpu_state == "critical" or ram_state == "critical":
+        overall_state = "critical"
+    elif cpu_state == "ok" and ram_state == "ok" and has_data:
+        overall_state = "ok"
+
+    return {
+        "enabled": enabled,
+        "has_data": has_data,
+        "cpu_state": cpu_state,
+        "ram_state": ram_state,
+        "cpu_pct": cpu_pct,
+        "ram_pct": ram_pct,
+        "checked_at": checked_at,
+        "overall_state": overall_state,
+    }
+
+
 def repo_metrics() -> list[dict[str, Any]]:
     snapshots = read_snapshot_index()
     runs = read_catalog_runs(500)
@@ -830,6 +869,7 @@ def repo_metrics() -> list[dict[str, Any]]:
     result: list[dict[str, Any]] = []
     for server in load_server_envs():
         latest = latest_by_server.get(server["SERVER_ID"])
+        resource = read_resource_snapshot(server)
         result.append(
             {
                 "server_id": server["SERVER_ID"],
@@ -840,6 +880,13 @@ def repo_metrics() -> list[dict[str, Any]]:
                 "repo_path": server["repo_path"],
                 "backup_cron": server["BACKUP_CRON"] or "-",
                 "disk_cron": server["DISK_CHECK_CRON"] or "-",
+                "resource_cron": server["RESOURCE_CHECK_CRON"] or "-",
+                "resource_enabled": resource["enabled"],
+                "resource_has_data": resource["has_data"],
+                "resource_cpu_pct": resource["cpu_pct"],
+                "resource_ram_pct": resource["ram_pct"],
+                "resource_checked_at": resource["checked_at"],
+                "resource_overall_state": resource["overall_state"],
             }
         )
     return result
@@ -959,6 +1006,11 @@ def queue_restore_payload(payload: dict[str, Any]) -> dict[str, Any]:
 def queue_disk_check(server_filename: str) -> dict[str, Any]:
     command = f"{PLATFORM_ROOT}/scripts/orbix-ops.sh disk-check {shlex.quote(server_filename)}"
     return queue_job("disk-check", server_filename, command, {"server_filename": server_filename})
+
+
+def queue_resource_check(server_filename: str) -> dict[str, Any]:
+    command = f"{PLATFORM_ROOT}/scripts/orbix-ops.sh resource-check {shlex.quote(server_filename)}"
+    return queue_job("resource-check", server_filename, command, {"server_filename": server_filename})
 
 
 def queue_log_capture(server_filename: str, source_name: str, target_name: str, lines: int) -> dict[str, Any]:
@@ -1249,6 +1301,12 @@ def action_restore() -> Any:
 @app.post("/actions/disk-check")
 def action_disk_check() -> Any:
     job = queue_disk_check(request.form["server_filename"].strip())
+    return redirect(url_for("job_detail", job_id=job["id"]))
+
+
+@app.post("/actions/resource-check")
+def action_resource_check() -> Any:
+    job = queue_resource_check(request.form["server_filename"].strip())
     return redirect(url_for("job_detail", job_id=job["id"]))
 
 

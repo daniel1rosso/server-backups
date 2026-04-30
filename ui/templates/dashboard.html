@@ -105,7 +105,7 @@
     <header class="panel-head">
       <div>
         <h3>Repositories</h3>
-        <p>Where Orbix stores each server history.</p>
+        <p>Where Orbix stores each server history and the latest resource scan.</p>
       </div>
     </header>
     <div class="table-wrap is-stacked-mobile">
@@ -115,6 +115,7 @@
             <th>Server</th>
             <th>Schedule</th>
             <th>Snapshots</th>
+            <th>CPU / RAM</th>
             <th>Latest Run</th>
           </tr>
         </thead>
@@ -128,8 +129,25 @@
             <td data-label="Schedule">
               <div>{{ item.backup_cron }}</div>
               <div class="table-subline">disk: {{ item.disk_cron }}</div>
+              <div class="table-subline">resources: {{ item.resource_cron }}</div>
             </td>
             <td data-label="Snapshots">{{ item.snapshot_count }}</td>
+            <td data-label="CPU / RAM">
+              {% if item.resource_enabled and item.resource_has_data %}
+              <div>CPU: {{ item.resource_cpu_pct if item.resource_cpu_pct is not none else "-" }}%</div>
+              <div class="table-subline">RAM: {{ item.resource_ram_pct if item.resource_ram_pct is not none else "-" }}%</div>
+              <div class="table-subline">{{ item.resource_checked_at or "-" }}</div>
+              <div class="table-subline">
+                <span class="badge {{ 'done' if item.resource_overall_state == 'ok' else 'failed' if item.resource_overall_state == 'critical' else 'queued' }}">{{ item.resource_overall_state }}</span>
+              </div>
+            {% elif item.resource_enabled %}
+              <div>-</div>
+              <div class="table-subline">Sin escaneo todavía</div>
+            {% else %}
+              <div>-</div>
+              <div class="table-subline">Deshabilitado</div>
+            {% endif %}
+            </td>
             <td data-label="Latest Run">{{ item.latest_run or "-" }}</td>
           </tr>
           {% endfor %}

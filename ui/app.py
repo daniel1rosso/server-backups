@@ -90,6 +90,10 @@ SERVER_FIELD_KEYS = [
     "RESOURCE_CHECK_CRON",
     "CPU_THRESHOLD_PCT",
     "RAM_THRESHOLD_PCT",
+    "RESTORE_REQUIRED_APT_PACKAGES",
+    "RESTORE_SYSTEMD_SERVICES",
+    "COMPOSE_PROJECT_PATHS",
+    "K8S_MANIFEST_PATHS",
     "DOCKER_CHECK_ENABLED",
     "DOCKER_CHECK_CRON",
     "DOCKER_ALERT_CONTAINERS",
@@ -497,12 +501,76 @@ def snapshot_choices(server_id: str, snapshots: dict[str, Any]) -> list[dict[str
     return choices
 
 
-def restore_catalog() -> list[dict[str, Any]]:
-    snapshots = read_snapshot_index()
+def restore_catalog_from_runs() -> list[dict[str, Any]]:
+    runs = read_catalog_runs(500)
+    by_server: dict[str, list[dict[str, Any]]] = {}
+    seen: set[tuple[str, str]] = set()
+    for row in runs:
+        server_id = str(row.get("server_id") or "").strip()
+        snapshot_id = str(row.get("snapshot_id") or "").strip()
+        short_id = str(row.get("restic_short_id") or snapshot_id[:8]).strip()
+        if not server_id or not snapshot_id:
+            continue
+        key = (server_id, snapshot_id)
+        if key in seen:
+            continue
+        seen.add(key)
+        try:
+            paths = json.loads(row.get("paths_json") or "[]")
+        except json.JSONDecodeError:
+            paths = []
+        try:
+            manifest = json.loads(row.get("manifest_json") or "{}")
+        except json.JSONDecodeError:
+            manifest = {}
+        subpath_options, include_options = build_restore_path_options(paths if isinstance(paths, list) else [])
+        snapshot_version = str(row.get("snapshot_version") or "").strip()
+        reproducible = snapshot_version == "orbix-v2" and isinstance(manifest, dict) and bool(manifest)
+        label_bits = [short_id]
+        created_at = str(row.get("created_at") or "").strip()
+        if created_at:
+            label_bits.append(created_at.replace("T", " ")[:19])
+        if include_options:
+            label_bits.append(f"{len(include_options)} paths")
+        label_bits.append("reproducible" if reproducible else "legacy")
+        by_server.setdefault(server_id, []).append(
+            {
+                "id": snapshot_id,
+                "short_id": short_id,
+                "created_at": created_at,
+                "hostname": server_id,
+                "paths_count": len(include_options),
+                "label": " · ".join(label_bits),
+                "target_suggestion": suggest_restore_target(server_id, short_id),
+                "subpath_options": subpath_options,
+                "include_options": include_options,
+                "snapshot_version": snapshot_version or "legacy",
+                "reproducible": reproducible,
+            }
+        )
     catalog: list[dict[str, Any]] = []
     for server in load_server_envs():
-        server_id = server["SERVER_ID"]
+        choices = by_server.get(server["SERVER_ID"], [])
         catalog.append(
+            {
+                "server_id": server["SERVER_ID"],
+                "repo_path": server["repo_path"],
+                "snapshot_count": len(choices),
+                "choices": choices,
+            }
+        )
+    return catalog
+
+
+def restore_catalog() -> list[dict[str, Any]]:
+    catalog = restore_catalog_from_runs()
+    if any(item["choices"] for item in catalog):
+        return catalog
+    snapshots = read_snapshot_index()
+    fallback: list[dict[str, Any]] = []
+    for server in load_server_envs():
+        server_id = server["SERVER_ID"]
+        fallback.append(
             {
                 "server_id": server_id,
                 "repo_path": server["repo_path"],
@@ -510,7 +578,7 @@ def restore_catalog() -> list[dict[str, Any]]:
                 "choices": snapshot_choices(server_id, snapshots),
             }
         )
-    return catalog
+    return fallback
 
 
 def restore_form_state(form: Any | None = None) -> dict[str, Any]:
@@ -606,7 +674,7 @@ def validate_restore_request(form: Any) -> tuple[dict[str, str], list[str], dict
     if strategy == "direct" and state["confirm_direct"] != "yes":
         errors.append("El modo direct requiere confirmación explícita antes de ejecutar el restore.")
 
-    if target_dir and strategy == "direct" and any(target_dir.startswith(prefix) for prefix in SAFE_RESTORE_PREFIXES):
+    if target_dir and strategy == "direct" and restore_scope != "full" and any(target_dir.startswith(prefix) for prefix in SAFE_RESTORE_PREFIXES):
         errors.append("El modo direct requiere un target final; si querés staging usá el modo staging.")
 
     snapshot_subpath = normalize_snapshot_path(state["snapshot_subpath"])
@@ -642,6 +710,8 @@ def validate_restore_request(form: Any) -> tuple[dict[str, str], list[str], dict
         "snapshot_id": snapshot["id"],
         "snapshot_short_id": snapshot["short_id"],
         "snapshot_created_at": snapshot["created_at"],
+        "snapshot_version": snapshot.get("snapshot_version", "legacy"),
+        "reproducible": bool(snapshot.get("reproducible", False)),
         "target_dir": target_dir,
         "strategy": strategy,
         "restore_scope": restore_scope,
@@ -880,6 +950,8 @@ def queue_restore_payload(payload: dict[str, Any]) -> dict[str, Any]:
     )
     for include_path in payload.get("include_paths", []):
         command += f" --include {shlex.quote(include_path)}"
+    command += f" --strategy {shlex.quote(payload.get('strategy', 'staging'))}"
+    command += f" --scope {shlex.quote(payload.get('restore_scope', 'full'))}"
     target = f"{payload['server_id']} -> {payload['target_dir']}"
     return queue_job("restore", target, command, payload)
 

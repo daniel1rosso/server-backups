@@ -8,6 +8,16 @@
 4. validar contenido
 5. promover manualmente a destino final si corresponde
 
+Para snapshots `orbix-v2`, el modo `direct` intenta reconstrucción autónoma:
+
+- valida dependencias del host
+- instala paquetes faltantes vía `apt` si hace falta
+- restaura rutas originales declaradas en el manifest
+- recrea proyectos Docker Compose y manifests Kubernetes declarados
+- restaura dumps/volúmenes y vuelve a iniciar servicios
+
+Si el snapshot es legacy y no trae `snapshot-manifest.json`, Orbix hace fallback con warning y deja el restore en workspace para continuación manual.
+
 ## Listado
 
 ```bash
@@ -54,8 +64,9 @@ sudo /opt/backup-platform/scripts/backup-restore-helper.sh ls rpi-house <snapsho
 5. elegir `full snapshot` o `partial paths only`
 6. si es parcial, indicar `snapshot subpath` y/o `include paths`
 7. indicar target path
-8. ejecutar restore
-9. seguir el job desde `Jobs`
+8. si el snapshot es `reproducible`, `direct + full` usa ese path como workspace/reporte y restaura sobre las rutas originales del snapshot
+9. ejecutar restore
+10. seguir el job desde `Jobs`
 
 ## Casos típicos
 

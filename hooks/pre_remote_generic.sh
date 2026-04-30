@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-mkdir -p "$BACKUP_STAGING/system" "$BACKUP_STAGING/db-dumps" "$BACKUP_STAGING/docker-volumes"
+mkdir -p "$BACKUP_STAGING/system" "$BACKUP_STAGING/db-dumps" "$BACKUP_STAGING/docker-volumes" "$BACKUP_STAGING/compose-projects" "$BACKUP_STAGING/k8s-manifests"
 
 SSH_OPTS=(-i "${REMOTE_SSH_KEY:?missing REMOTE_SSH_KEY}" -p "${REMOTE_PORT:-22}" -o StrictHostKeyChecking=yes)
 REMOTE="${REMOTE_USER:?missing REMOTE_USER}@${REMOTE_HOST:?missing REMOTE_HOST}"
@@ -108,6 +108,37 @@ run_remote_volume_archives() {
   done
 }
 
+copy_remote_project_entries() {
+  local raw="$1"
+  local root="$2"
+  local entry label source
+  [[ -n "$raw" ]] || return 0
+  IFS=';' read -r -a entries <<<"$raw"
+  for entry in "${entries[@]}"; do
+    [[ -n "$(trim "$entry")" ]] || continue
+    if [[ "$entry" == *"|"* ]]; then
+      IFS='|' read -r label source <<<"$entry"
+    else
+      source="$entry"
+      label=$(basename "${source%/}")
+    fi
+    mkdir -p "$BACKUP_STAGING/$root/$label"
+    set +e
+    rsync -az -e "ssh ${SSH_OPTS[*]}" "${REMOTE}:${source%/}/" "$BACKUP_STAGING/$root/$label"/
+    rsync_status=$?
+    set -e
+    if [[ $rsync_status -ne 0 ]]; then
+      set +e
+      rsync -az -e "ssh ${SSH_OPTS[*]}" "${REMOTE}:${source}" "$BACKUP_STAGING/$root/$label"/
+      rsync_status=$?
+      set -e
+      if [[ $rsync_status -ne 0 && $rsync_status -ne 23 ]]; then
+        exit "$rsync_status"
+      fi
+    fi
+  done
+}
+
 for path in ${REMOTE_PATHS:-}; do
   set +e
   rsync -az -e "ssh ${SSH_OPTS[*]}" "${REMOTE}:${path}" "$BACKUP_STAGING/system/"
@@ -138,3 +169,5 @@ run_remote_postgres_dumps
 run_remote_mysql_dumps
 run_remote_mongo_dumps
 run_remote_volume_archives
+copy_remote_project_entries "${COMPOSE_PROJECT_PATHS:-}" "compose-projects"
+copy_remote_project_entries "${K8S_MANIFEST_PATHS:-}" "k8s-manifests"

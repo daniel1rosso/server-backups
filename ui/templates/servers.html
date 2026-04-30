@@ -108,6 +108,10 @@
         <div class="field"><label>Resource Check Cron</label><input name="RESOURCE_CHECK_CRON" value="{{ server.RESOURCE_CHECK_CRON }}" placeholder="*/10 * * * *"></div>
         <div class="field"><label>CPU Threshold %</label><input name="CPU_THRESHOLD_PCT" value="{{ server.CPU_THRESHOLD_PCT }}" placeholder="90"></div>
         <div class="field"><label>RAM Threshold %</label><input name="RAM_THRESHOLD_PCT" value="{{ server.RAM_THRESHOLD_PCT }}" placeholder="90"></div>
+        <div class="field span-2"><label>Restore Required Apt Packages</label><input name="RESTORE_REQUIRED_APT_PACKAGES" value="{{ server.RESTORE_REQUIRED_APT_PACKAGES }}" placeholder="docker.io docker-compose-v2 postgresql-client"></div>
+        <div class="field span-2"><label>Restore Systemd Services</label><input name="RESTORE_SYSTEMD_SERVICES" value="{{ server.RESTORE_SYSTEMD_SERVICES }}" placeholder="docker nginx dokploy"></div>
+        <div class="field span-2"><label>Compose Project Paths</label><textarea name="COMPOSE_PROJECT_PATHS">{{ server.COMPOSE_PROJECT_PATHS }}</textarea></div>
+        <div class="field span-2"><label>K8s Manifest Paths</label><textarea name="K8S_MANIFEST_PATHS">{{ server.K8S_MANIFEST_PATHS }}</textarea></div>
         <div class="field"><label>Docker Check Enabled</label><input name="DOCKER_CHECK_ENABLED" value="{{ server.DOCKER_CHECK_ENABLED or 'false' }}"></div>
         <div class="field"><label>Docker Check Cron</label><input name="DOCKER_CHECK_CRON" value="{{ server.DOCKER_CHECK_CRON }}" placeholder="*/5 * * * *"></div>
         <div class="field span-2"><label>Docker Alert Containers</label><input name="DOCKER_ALERT_CONTAINERS" value="{{ server.DOCKER_ALERT_CONTAINERS }}" placeholder="orbix-ui postgres redis"></div>
@@ -183,6 +187,10 @@
       <div class="field"><label>Resource Check Cron</label><input name="RESOURCE_CHECK_CRON" value="*/10 * * * *"></div>
       <div class="field"><label>CPU Threshold %</label><input name="CPU_THRESHOLD_PCT" value="90"></div>
       <div class="field"><label>RAM Threshold %</label><input name="RAM_THRESHOLD_PCT" value="90"></div>
+      <div class="field span-2"><label>Restore Required Apt Packages</label><input name="RESTORE_REQUIRED_APT_PACKAGES" placeholder="docker.io docker-compose-v2 postgresql-client"></div>
+      <div class="field span-2"><label>Restore Systemd Services</label><input name="RESTORE_SYSTEMD_SERVICES" placeholder="docker nginx dokploy"></div>
+      <div class="field span-2"><label>Compose Project Paths</label><textarea name="COMPOSE_PROJECT_PATHS" placeholder="orbix|/opt/backup-platform/deploy"></textarea></div>
+      <div class="field span-2"><label>K8s Manifest Paths</label><textarea name="K8S_MANIFEST_PATHS" placeholder="apps|/srv/k8s/apps"></textarea></div>
       <div class="field"><label>Docker Check Enabled</label><input name="DOCKER_CHECK_ENABLED" value="false"></div>
       <div class="field"><label>Docker Check Cron</label><input name="DOCKER_CHECK_CRON" value="*/5 * * * *"></div>
       <div class="field span-2"><label>Docker Alert Containers</label><input name="DOCKER_ALERT_CONTAINERS" placeholder="orbix-ui postgres redis"></div>

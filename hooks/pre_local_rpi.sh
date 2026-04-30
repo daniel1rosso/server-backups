@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-mkdir -p "$BACKUP_STAGING/system" "$BACKUP_STAGING/dokploy-config" "$BACKUP_STAGING/dokploy-db" "$BACKUP_STAGING/docker-volumes" "$BACKUP_STAGING/db-dumps"
+mkdir -p "$BACKUP_STAGING/system" "$BACKUP_STAGING/dokploy-config" "$BACKUP_STAGING/dokploy-db" "$BACKUP_STAGING/docker-volumes" "$BACKUP_STAGING/db-dumps" "$BACKUP_STAGING/compose-projects" "$BACKUP_STAGING/k8s-manifests"
 
 copy_if_exists() {
   local src="$1"
@@ -77,6 +77,30 @@ run_local_mongo_dumps() {
   done
 }
 
+copy_project_entries() {
+  local raw="$1"
+  local root="$2"
+  local entry label source
+  [[ -n "$raw" ]] || return 0
+  IFS=';' read -r -a entries <<<"$raw"
+  for entry in "${entries[@]}"; do
+    [[ -n "$(trim "$entry")" ]] || continue
+    if [[ "$entry" == *"|"* ]]; then
+      IFS='|' read -r label source <<<"$entry"
+    else
+      source="$entry"
+      label=$(basename "${source%/}")
+    fi
+    [[ -e "$source" ]] || continue
+    mkdir -p "$BACKUP_STAGING/$root/$label"
+    if [[ -d "$source" ]]; then
+      rsync -a "$source"/ "$BACKUP_STAGING/$root/$label"/
+    else
+      cp -a "$source" "$BACKUP_STAGING/$root/$label"/
+    fi
+  done
+}
+
 for path in ${HOST_PATHS:-}; do
   copy_if_exists "$path" "$BACKUP_STAGING/system"
 done
@@ -118,6 +142,9 @@ fi
 if [[ "${UFW_EXPORT:-false}" == "true" ]]; then
   ufw status verbose > "$BACKUP_STAGING/system/ufw-status.txt" 2>&1 || true
 fi
+
+copy_project_entries "${COMPOSE_PROJECT_PATHS:-}" "compose-projects"
+copy_project_entries "${K8S_MANIFEST_PATHS:-}" "k8s-manifests"
 
 for vol in ${DOCKER_VOLUMES:-}; do
   mountpoint=$(docker volume inspect "$vol" --format '{{.Mountpoint}}' 2>/dev/null || true)

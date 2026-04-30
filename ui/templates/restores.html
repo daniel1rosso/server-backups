@@ -48,6 +48,7 @@
               value="{{ snap.short_id }}"
               data-server-id="{{ item.server_id }}"
               data-target-suggestion="{{ snap.target_suggestion }}"
+              data-snapshot-version="{{ snap.snapshot_version or 'legacy' }}"
               {% if restore_form.snapshot_id == snap.short_id %}selected{% endif %}
             >
               {{ item.server_id }} · {{ snap.label }}
@@ -56,6 +57,7 @@
           {% endfor %}
         </select>
         <p class="field-note" data-snapshot-empty-note hidden>No indexed snapshots for this server.</p>
+        <p class="field-note" data-snapshot-version-note></p>
       </div>
 
       <div class="field">
@@ -83,7 +85,7 @@
           placeholder="/var/tmp/orbix-restore/server-id/snapshot-id"
           data-restore-target
         >
-        <p class="field-note">Safe roots: {{ safe_restore_prefixes|join(", ") }}</p>
+        <p class="field-note">En `staging` es el restore target. En `direct/full` se usa como workspace y reporte del restore autónomo. Safe roots: {{ safe_restore_prefixes|join(", ") }}</p>
       </div>
 
       <div class="field span-2" data-partial-only {% if restore_form.restore_scope != "partial" %}hidden{% endif %}>
@@ -202,6 +204,7 @@
   const scopeSelect = form.querySelector("[data-restore-scope]");
   const targetInput = form.querySelector("[data-restore-target]");
   const emptyNote = form.querySelector("[data-snapshot-empty-note]");
+  const snapshotVersionNote = form.querySelector("[data-snapshot-version-note]");
   const subpathSelect = form.querySelector("[data-restore-subpath]");
   const subpathNote = form.querySelector("[data-restore-subpath-note]");
   const includeList = form.querySelector("[data-restore-include-list]");
@@ -253,10 +256,16 @@
     const selected = snapshotSelect.selectedOptions[0];
     if (!(selected instanceof HTMLOptionElement)) return;
     const suggestion = selected.dataset.targetSuggestion || "";
+    const version = selected.dataset.snapshotVersion || "legacy";
     targetInput.placeholder = suggestion || "/var/tmp/orbix-restore/server-id/snapshot-id";
     if (!targetTouched || !targetInput.value.trim()) {
       targetInput.value = suggestion;
       targetTouched = false;
+    }
+    if (snapshotVersionNote instanceof HTMLElement) {
+      snapshotVersionNote.textContent = version === "orbix-v2"
+        ? "Este snapshot incluye manifest reproducible y habilita restore autónomo en modo direct/full."
+        : "Snapshot legacy: Orbix puede restaurar datos, pero la reconstrucción autónoma completa puede degradarse con warnings.";
     }
   };
 

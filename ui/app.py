@@ -10,6 +10,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib import parse, request as urlrequest
 
 from flask import Flask, jsonify, redirect, render_template, request, url_for
 
@@ -28,6 +29,30 @@ UI_JOBS_DIR = UI_STATE_DIR / "jobs"
 HOST_ENTER_MODE = os.environ.get("HOST_ENTER_MODE", "nsenter")
 RUNNER_LOG = BACKUP_LOG_DIR / f"backup-runner-{datetime.now().strftime('%F')}.log"
 SAFE_RESTORE_PREFIXES = ("/var/tmp/orbix-restore/", "/tmp/orbix-restore/", "/srv/orbix-restore/")
+NOTIFICATION_FIELD_KEYS = [
+    "TELEGRAM_NOTIFY_BACKUP_START",
+    "TELEGRAM_NOTIFY_BACKUP_SUCCESS",
+    "TELEGRAM_NOTIFY_BACKUP_FAILURE",
+    "TELEGRAM_NOTIFY_RESTORE_START",
+    "TELEGRAM_NOTIFY_RESTORE_SUCCESS",
+    "TELEGRAM_NOTIFY_RESTORE_FAILURE",
+    "TELEGRAM_NOTIFY_DISK_ALERT",
+    "TELEGRAM_NOTIFY_DISK_RECOVERY",
+    "TELEGRAM_NOTIFY_CPU_ALERT",
+    "TELEGRAM_NOTIFY_CPU_RECOVERY",
+    "TELEGRAM_NOTIFY_RAM_ALERT",
+    "TELEGRAM_NOTIFY_RAM_RECOVERY",
+    "TELEGRAM_NOTIFY_DOCKER_START",
+    "TELEGRAM_NOTIFY_DOCKER_STOP",
+    "TELEGRAM_NOTIFY_DOCKER_UNHEALTHY",
+    "TELEGRAM_NOTIFY_DOCKER_ERROR",
+    "TELEGRAM_NOTIFY_DOCKER_RECOVERY",
+    "TELEGRAM_NOTIFY_K8S_POD_START",
+    "TELEGRAM_NOTIFY_K8S_POD_ERROR",
+    "TELEGRAM_NOTIFY_K8S_POD_RECOVERY",
+    "TELEGRAM_NOTIFY_K8S_WORKLOAD_DEGRADED",
+    "TELEGRAM_NOTIFY_K8S_WORKLOAD_RECOVERY",
+]
 
 GLOBAL_FIELD_KEYS = [
     "BACKUP_ROOT",
@@ -41,6 +66,7 @@ GLOBAL_FIELD_KEYS = [
     "TELEGRAM_ENABLED",
     "TELEGRAM_BOT_TOKEN",
     "TELEGRAM_CHAT_ID",
+    *NOTIFICATION_FIELD_KEYS,
     "SFTP_REPO_HOST",
     "SFTP_REPO_PORT",
     "SFTP_REPO_USER",
@@ -60,6 +86,16 @@ SERVER_FIELD_KEYS = [
     "DISK_CHECK_CRON",
     "DISK_THRESHOLD_PCT",
     "DISK_ALERT_TARGETS",
+    "RESOURCE_CHECK_ENABLED",
+    "RESOURCE_CHECK_CRON",
+    "CPU_THRESHOLD_PCT",
+    "RAM_THRESHOLD_PCT",
+    "DOCKER_CHECK_ENABLED",
+    "DOCKER_CHECK_CRON",
+    "DOCKER_ALERT_CONTAINERS",
+    "K8S_CHECK_ENABLED",
+    "K8S_CHECK_CRON",
+    "K8S_NAMESPACE_TARGETS",
     "RETENTION_DAILY",
     "RETENTION_WEEKLY",
     "RETENTION_MONTHLY",
@@ -85,6 +121,16 @@ SERVER_FIELD_KEYS = [
 ]
 
 DOCTOR_COMMAND = f"{PLATFORM_ROOT}/scripts/orbix-doctor.sh"
+JOB_NOTIFICATION_EVENTS = {
+    ("restore", "running"): "TELEGRAM_NOTIFY_RESTORE_START",
+    ("restore", "done"): "TELEGRAM_NOTIFY_RESTORE_SUCCESS",
+    ("restore", "failed"): "TELEGRAM_NOTIFY_RESTORE_FAILURE",
+}
+JOB_NOTIFICATION_DEFAULTS = {
+    "TELEGRAM_NOTIFY_RESTORE_START": True,
+    "TELEGRAM_NOTIFY_RESTORE_SUCCESS": True,
+    "TELEGRAM_NOTIFY_RESTORE_FAILURE": True,
+}
 
 
 app = Flask(__name__, template_folder=str(APP_ROOT / "templates"), static_folder=str(APP_ROOT / "static"))
@@ -92,6 +138,12 @@ app = Flask(__name__, template_folder=str(APP_ROOT / "templates"), static_folder
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def env_truthy(value: str | None, default: bool = False) -> bool:
+    if value is None or value == "":
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
 def ensure_dirs() -> None:
@@ -198,6 +250,66 @@ def load_global_env() -> dict[str, str]:
     return parse_env_text(read_text(GLOBAL_ENV_FILE))
 
 
+def send_telegram_notification(text: str, env: dict[str, str] | None = None) -> None:
+    current = env or load_global_env()
+    if not env_truthy(current.get("TELEGRAM_ENABLED"), default=False):
+        return
+    token = current.get("TELEGRAM_BOT_TOKEN", "").strip()
+    chat_id = current.get("TELEGRAM_CHAT_ID", "").strip()
+    if not token or not chat_id:
+        return
+    data = parse.urlencode({"chat_id": chat_id, "text": text}).encode()
+    req = urlrequest.Request(f"https://api.telegram.org/bot{token}/sendMessage", data=data, method="POST")
+    try:
+        with urlrequest.urlopen(req, timeout=10):
+            pass
+    except Exception:
+        return
+
+
+def job_payload(job: dict[str, Any]) -> dict[str, Any]:
+    raw = job.get("payload_json")
+    if isinstance(raw, str):
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            return {}
+    if isinstance(raw, dict):
+        return raw
+    return {}
+
+
+def job_notification_text(job: dict[str, Any], status: str) -> str | None:
+    env = load_global_env()
+    flag = JOB_NOTIFICATION_EVENTS.get((job.get("job_type", ""), status))
+    if not flag or not env_truthy(env.get(flag), default=JOB_NOTIFICATION_DEFAULTS.get(flag, False)):
+        return None
+    payload = job_payload(job)
+    if job.get("job_type") == "restore":
+        scope = payload.get("restore_scope", "full")
+        strategy = payload.get("strategy", "staging")
+        snapshot = payload.get("snapshot_short_id") or payload.get("snapshot_id") or "-"
+        lines = [
+            f"Orbix restore {status}",
+            f"server={payload.get('server_id', '-')}",
+            f"snapshot={snapshot}",
+            f"scope={scope}",
+            f"strategy={strategy}",
+            f"target={payload.get('target_dir', job.get('target', '-'))}",
+            f"job={job.get('id', '-')}",
+        ]
+        if status == "failed" and job.get("exit_code") is not None:
+            lines.append(f"exit_code={job['exit_code']}")
+        return "\n".join(lines)
+    return None
+
+
+def maybe_notify_job(job: dict[str, Any], status: str) -> None:
+    text = job_notification_text(job, status)
+    if text:
+        send_telegram_notification(text)
+
+
 def global_form_data() -> dict[str, str]:
     env = load_global_env()
     payload = {key: env.get(key, "") for key in GLOBAL_FIELD_KEYS}
@@ -226,6 +338,9 @@ def normalize_server_data(data: dict[str, str], filename: str) -> dict[str, Any]
     normalized["volumes_summary"] = normalized.get("REMOTE_DOCKER_VOLUMES") or normalized.get("DOCKER_VOLUMES") or "-"
     normalized["schedule_summary"] = normalized.get("BACKUP_CRON") or "-"
     normalized["disk_schedule_summary"] = normalized.get("DISK_CHECK_CRON") or "-"
+    normalized["resource_schedule_summary"] = normalized.get("RESOURCE_CHECK_CRON") or "-"
+    normalized["docker_schedule_summary"] = normalized.get("DOCKER_CHECK_CRON") or "-"
+    normalized["k8s_schedule_summary"] = normalized.get("K8S_CHECK_CRON") or "-"
     normalized["retention_summary"] = (
         f"D{normalized.get('RETENTION_DAILY') or 'default'} / "
         f"W{normalized.get('RETENTION_WEEKLY') or 'default'} / "
@@ -312,6 +427,39 @@ def suggest_restore_target(server_id: str, snapshot_id: str) -> str:
     return f"/var/tmp/orbix-restore/{server_id}/{snapshot_token}"
 
 
+def normalize_snapshot_path(value: str) -> str:
+    path = (value or "").strip()
+    if not path:
+        return ""
+    normalized = os.path.normpath(path)
+    if normalized in {".", "/"}:
+        return "/"
+    if not normalized.startswith("/"):
+        normalized = f"/{normalized}"
+    return normalized
+
+
+def build_restore_path_options(paths: list[str]) -> tuple[list[str], list[str]]:
+    normalized_paths: list[str] = []
+    subpath_candidates: set[str] = set()
+    seen_paths: set[str] = set()
+    for raw_path in paths:
+        normalized = normalize_snapshot_path(str(raw_path))
+        if not normalized or normalized == "/" or normalized in seen_paths:
+            continue
+        seen_paths.add(normalized)
+        normalized_paths.append(normalized)
+        parts = [part for part in normalized.strip("/").split("/") if part]
+        current = ""
+        for part in parts[:-1]:
+            current += f"/{part}"
+            subpath_candidates.add(current)
+        if "." not in parts[-1]:
+            subpath_candidates.add(normalized)
+    subpath_options = sorted(subpath_candidates)
+    return subpath_options, normalized_paths
+
+
 def snapshot_choices(server_id: str, snapshots: dict[str, Any]) -> list[dict[str, Any]]:
     items = snapshots.get(server_id, []) or []
     choices: list[dict[str, Any]] = []
@@ -321,7 +469,9 @@ def snapshot_choices(server_id: str, snapshots: dict[str, Any]) -> list[dict[str
         if not snapshot_id:
             continue
         paths = item.get("paths") or []
-        paths_count = len(paths) if isinstance(paths, list) else 0
+        path_items = paths if isinstance(paths, list) else []
+        subpath_options, include_options = build_restore_path_options(path_items)
+        paths_count = len(include_options)
         created_at = str(item.get("time") or item.get("created_at") or "").strip()
         hostname = str(item.get("hostname") or "").strip()
         label_bits = [short_id]
@@ -340,6 +490,8 @@ def snapshot_choices(server_id: str, snapshots: dict[str, Any]) -> list[dict[str
                 "paths_count": paths_count,
                 "label": " · ".join(label_bits),
                 "target_suggestion": suggest_restore_target(server_id, short_id),
+                "subpath_options": subpath_options,
+                "include_options": include_options,
             }
         )
     return choices
@@ -361,8 +513,9 @@ def restore_catalog() -> list[dict[str, Any]]:
     return catalog
 
 
-def restore_form_state(form: Any | None = None) -> dict[str, str]:
+def restore_form_state(form: Any | None = None) -> dict[str, Any]:
     strategy = (form.get("strategy", "staging").strip() if form else "staging") or "staging"
+    include_selected = form.getlist("include_paths_selected") if form and hasattr(form, "getlist") else []
     return {
         "server_id": form.get("server_id", "").strip() if form else "",
         "snapshot_id": form.get("snapshot_id", "").strip() if form else "",
@@ -371,6 +524,7 @@ def restore_form_state(form: Any | None = None) -> dict[str, str]:
         "restore_scope": (form.get("restore_scope", "full").strip() if form else "full") or "full",
         "snapshot_subpath": form.get("snapshot_subpath", "").strip() if form else "",
         "include_paths": form.get("include_paths", "").strip() if form else "",
+        "include_paths_selected": [normalize_snapshot_path(value) for value in include_selected if normalize_snapshot_path(value)],
         "confirm_direct": form.get("confirm_direct", "").strip() if form else "",
         "notes": form.get("notes", "").strip() if form else "",
     }
@@ -390,6 +544,18 @@ def parse_multiline_paths(text: str) -> list[str]:
         if not line:
             continue
         items.append(line)
+    return items
+
+
+def parse_selected_paths(values: list[str]) -> list[str]:
+    items: list[str] = []
+    seen: set[str] = set()
+    for value in values:
+        normalized = normalize_snapshot_path(value)
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        items.append(normalized)
     return items
 
 
@@ -443,9 +609,22 @@ def validate_restore_request(form: Any) -> tuple[dict[str, str], list[str], dict
     if target_dir and strategy == "direct" and any(target_dir.startswith(prefix) for prefix in SAFE_RESTORE_PREFIXES):
         errors.append("El modo direct requiere un target final; si querés staging usá el modo staging.")
 
-    snapshot_subpath = normalize_target_dir(state["snapshot_subpath"])
-    include_paths = parse_multiline_paths(state["include_paths"])
+    snapshot_subpath = normalize_snapshot_path(state["snapshot_subpath"])
+    include_paths = parse_selected_paths(form.getlist("include_paths_selected")) if hasattr(form, "getlist") else []
+    include_paths.extend(
+        [
+            path
+            for path in parse_selected_paths(parse_multiline_paths(state["include_paths"]))
+            if path not in include_paths
+        ]
+    )
+    if restore_scope == "full":
+        snapshot_subpath = ""
+        include_paths = []
+        state["snapshot_subpath"] = ""
+        state["include_paths"] = ""
     state["snapshot_subpath"] = snapshot_subpath
+    state["include_paths_selected"] = include_paths
     if snapshot_subpath and not snapshot_subpath.startswith("/"):
         errors.append("El subpath dentro del snapshot debe empezar con `/`.")
     for include_path in include_paths:
@@ -488,6 +667,7 @@ def render_restore_page(form: dict[str, str] | None = None, errors: list[str] | 
             "restore_scope": "full",
             "snapshot_subpath": "",
             "include_paths": "",
+            "include_paths_selected": [],
             "confirm_direct": "",
             "notes": "",
         }
@@ -641,6 +821,7 @@ def update_job(job_id: str, **fields: Any) -> None:
 def run_job_async(job: dict[str, Any], command: str) -> None:
     def worker() -> None:
         update_job(job["id"], status="running", started_at=utc_now())
+        maybe_notify_job(job, "running")
         with open(job["log_path"], "w", encoding="utf-8") as log_file:
             process = subprocess.Popen(
                 host_command(command),
@@ -655,6 +836,8 @@ def run_job_async(job: dict[str, Any], command: str) -> None:
             finished_at=utc_now(),
             exit_code=return_code,
         )
+        job["exit_code"] = return_code
+        maybe_notify_job(job, "done" if return_code == 0 else "failed")
 
     thread = threading.Thread(target=worker, daemon=True)
     thread.start()
@@ -951,6 +1134,8 @@ def save_notifications() -> Any:
     current["TELEGRAM_ENABLED"] = request.form.get("TELEGRAM_ENABLED", "false")
     current["TELEGRAM_BOT_TOKEN"] = request.form.get("TELEGRAM_BOT_TOKEN", "").strip()
     current["TELEGRAM_CHAT_ID"] = request.form.get("TELEGRAM_CHAT_ID", "").strip()
+    for key in NOTIFICATION_FIELD_KEYS:
+        current[key] = request.form.get(key, "false").strip() or "false"
     lines: list[str] = []
     known = set()
     for key in GLOBAL_FIELD_KEYS:

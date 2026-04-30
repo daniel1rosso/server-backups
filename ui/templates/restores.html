@@ -88,21 +88,20 @@
 
       <div class="field span-2" data-partial-only {% if restore_form.restore_scope != "partial" %}hidden{% endif %}>
         <label>Snapshot Subpath</label>
-        <input
-          name="snapshot_subpath"
-          value="{{ restore_form.snapshot_subpath }}"
-          placeholder="/volumes/postgres or /db-dumps"
-        >
-        <p class="field-note">Se traduce al formato `snapshot:/subpath` de restic.</p>
+        <select name="snapshot_subpath" data-restore-subpath></select>
+        <p class="field-note" data-restore-subpath-note>Elegí un subárbol del snapshot para restaurar sólo esa parte.</p>
       </div>
 
       <div class="field span-2" data-partial-only {% if restore_form.restore_scope != "partial" %}hidden{% endif %}>
         <label>Include Paths</label>
+        <div class="restore-picker" data-restore-include-list></div>
         <textarea
           name="include_paths"
           placeholder="/db-dumps/app.sql&#10;/volumes/redis/dump.rdb"
+          data-restore-include-fallback
+          {% if restore_form.include_paths_selected %}hidden{% endif %}
         >{{ restore_form.include_paths }}</textarea>
-        <p class="field-note">Un path por línea. Orbix los pasa como `--include` a `restic restore`.</p>
+        <p class="field-note" data-restore-include-note>Seleccioná una o más rutas del snapshot. Si no hay índice disponible, podés cargar paths manuales.</p>
       </div>
 
       <div class="field span-2" data-direct-only {% if restore_form.strategy != "direct" %}hidden{% endif %}>
@@ -193,6 +192,7 @@
 
 <script>
 (() => {
+  const restoreCatalog = {{ restore_catalog|tojson }};
   const form = document.querySelector("[data-restore-form]");
   if (!(form instanceof HTMLFormElement)) return;
 
@@ -202,14 +202,29 @@
   const scopeSelect = form.querySelector("[data-restore-scope]");
   const targetInput = form.querySelector("[data-restore-target]");
   const emptyNote = form.querySelector("[data-snapshot-empty-note]");
+  const subpathSelect = form.querySelector("[data-restore-subpath]");
+  const subpathNote = form.querySelector("[data-restore-subpath-note]");
+  const includeList = form.querySelector("[data-restore-include-list]");
+  const includeNote = form.querySelector("[data-restore-include-note]");
+  const includeFallback = form.querySelector("[data-restore-include-fallback]");
   const partialRows = [...form.querySelectorAll("[data-partial-only]")];
   const directRows = [...form.querySelectorAll("[data-direct-only]")];
 
-  if (!(serverSelect instanceof HTMLSelectElement) || !(snapshotSelect instanceof HTMLSelectElement) || !(strategySelect instanceof HTMLSelectElement) || !(scopeSelect instanceof HTMLSelectElement) || !(targetInput instanceof HTMLInputElement)) {
+  if (!(serverSelect instanceof HTMLSelectElement) || !(snapshotSelect instanceof HTMLSelectElement) || !(strategySelect instanceof HTMLSelectElement) || !(scopeSelect instanceof HTMLSelectElement) || !(targetInput instanceof HTMLInputElement) || !(subpathSelect instanceof HTMLSelectElement) || !(includeList instanceof HTMLElement) || !(includeFallback instanceof HTMLTextAreaElement)) {
     return;
   }
 
+  const selectedSnapshotSubpath = {{ restore_form.snapshot_subpath|tojson }};
+  const selectedIncludePaths = new Set({{ restore_form.include_paths_selected|default([], true)|tojson }});
   let targetTouched = false;
+
+  const catalogByServer = new Map(restoreCatalog.map((item) => [item.server_id, item]));
+
+  const currentSnapshot = () => {
+    const server = catalogByServer.get(serverSelect.value);
+    if (!server) return null;
+    return server.choices.find((choice) => choice.short_id === snapshotSelect.value) || null;
+  };
 
   const syncSnapshotOptions = () => {
     const serverId = serverSelect.value;
@@ -248,15 +263,77 @@
   const syncScopeRows = () => {
     const isPartial = scopeSelect.value === "partial";
     partialRows.forEach((row) => {
-      if (row instanceof HTMLElement) row.hidden = !isPartial;
+      if (!(row instanceof HTMLElement)) return;
+      row.hidden = !isPartial;
+      row.querySelectorAll("input, select, textarea").forEach((field) => {
+        field.disabled = !isPartial;
+      });
     });
   };
 
   const syncStrategyRows = () => {
     const isDirect = strategySelect.value === "direct";
     directRows.forEach((row) => {
-      if (row instanceof HTMLElement) row.hidden = !isDirect;
+      if (!(row instanceof HTMLElement)) return;
+      row.hidden = !isDirect;
+      row.querySelectorAll("input, select, textarea").forEach((field) => {
+        field.disabled = !isDirect;
+      });
     });
+  };
+
+  const syncPartialSelectors = () => {
+    const snapshot = currentSnapshot();
+    const subpathOptions = snapshot?.subpath_options || [];
+    const includeOptions = snapshot?.include_options || [];
+
+    subpathSelect.innerHTML = "";
+    const defaultOption = document.createElement("option");
+    defaultOption.value = "";
+    defaultOption.textContent = "Whole selected snapshot";
+    subpathSelect.appendChild(defaultOption);
+
+    subpathOptions.forEach((path) => {
+      const option = document.createElement("option");
+      option.value = path;
+      option.textContent = path;
+      if (path === selectedSnapshotSubpath) option.selected = true;
+      subpathSelect.appendChild(option);
+    });
+
+    includeList.innerHTML = "";
+    if (includeOptions.length) {
+      includeOptions.forEach((path) => {
+        const label = document.createElement("label");
+        label.className = "restore-choice";
+        const input = document.createElement("input");
+        input.type = "checkbox";
+        input.name = "include_paths_selected";
+        input.value = path;
+        input.checked = selectedIncludePaths.has(path);
+        const text = document.createElement("span");
+        text.textContent = path;
+        label.append(input, text);
+        includeList.appendChild(label);
+      });
+      includeFallback.hidden = true;
+      includeFallback.disabled = true;
+      if (includeNote instanceof HTMLElement) {
+        includeNote.textContent = "Seleccioná una o más rutas del snapshot. Orbix las pasa como --include a restic restore.";
+      }
+      if (subpathNote instanceof HTMLElement) {
+        subpathNote.textContent = "Elegí un subárbol indexado del snapshot para limitar el restore.";
+      }
+    } else {
+      includeFallback.hidden = false;
+      includeFallback.disabled = false;
+      if (includeNote instanceof HTMLElement) {
+        includeNote.textContent = "Este snapshot no tiene rutas indexadas. Cargá los include paths manualmente, uno por línea.";
+      }
+      if (subpathNote instanceof HTMLElement) {
+        subpathNote.textContent = "Si el snapshot no trae índice navegable, podés dejar este selector vacío y usar include paths manuales.";
+      }
+    }
   };
 
   targetInput.addEventListener("input", () => {
@@ -265,13 +342,18 @@
   serverSelect.addEventListener("change", () => {
     syncSnapshotOptions();
     syncTargetSuggestion();
+    syncPartialSelectors();
   });
-  snapshotSelect.addEventListener("change", syncTargetSuggestion);
+  snapshotSelect.addEventListener("change", () => {
+    syncTargetSuggestion();
+    syncPartialSelectors();
+  });
   scopeSelect.addEventListener("change", syncScopeRows);
   strategySelect.addEventListener("change", syncStrategyRows);
 
   syncSnapshotOptions();
   syncTargetSuggestion();
+  syncPartialSelectors();
   syncScopeRows();
   syncStrategyRows();
 })();

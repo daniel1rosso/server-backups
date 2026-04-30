@@ -21,6 +21,13 @@ log() {
   printf '%s %s\n' "$(date '+%F %T')" "$*" | tee -a "$RUN_LOG" >&2
 }
 
+notification_enabled() {
+  local key="$1"
+  local default_value="${2:-false}"
+  local value="${!key:-$default_value}"
+  [[ "${value,,}" == "true" || "$value" == "1" || "${value,,}" == "yes" || "${value,,}" == "on" ]]
+}
+
 telegram_send() {
   local text="$1"
   if [[ "${TELEGRAM_ENABLED:-false}" != "true" ]]; then
@@ -32,6 +39,14 @@ telegram_send() {
   curl -fsS -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
     -d "chat_id=${TELEGRAM_CHAT_ID}" \
     --data-urlencode "text=${text}" >/dev/null || true
+}
+
+telegram_send_if_enabled() {
+  local key="$1"
+  local text="$2"
+  local default_value="${3:-false}"
+  notification_enabled "$key" "$default_value" || return 0
+  telegram_send "$text"
 }
 
 init_catalog() {
@@ -154,11 +169,15 @@ run_server() {
   mkdir -p "$staging"
 
   log "[$SERVER_ID] start"
-  telegram_send "Backup start: ${SERVER_ID} (${SOURCE_ROLE:-unknown})"
+  telegram_send_if_enabled "TELEGRAM_NOTIFY_BACKUP_START" "Backup start: ${SERVER_ID} (${SOURCE_ROLE:-unknown})" "true"
 
   ensure_restic_repo "$repo"
 
-  BACKUP_STAGING="$staging" BACKUP_ROOT="$BACKUP_ROOT" bash "$hook_path"
+  if ! BACKUP_STAGING="$staging" BACKUP_ROOT="$BACKUP_ROOT" bash "$hook_path"; then
+    telegram_send_if_enabled "TELEGRAM_NOTIFY_BACKUP_FAILURE" "Backup failed: ${SERVER_ID} hook ${HOOK_SCRIPT} devolvio error" "true"
+    rm -rf "$staging"
+    return 1
+  fi
 
   local had_group=false
   shopt -s nullglob
@@ -213,6 +232,8 @@ run_server() {
       "$duration_seconds" \
       "$error_message"
     if [[ $status_code -ne 0 ]]; then
+      telegram_send_if_enabled "TELEGRAM_NOTIFY_BACKUP_FAILURE" "Backup failed: ${SERVER_ID} group ${group_name} devolvio error en restic" "true"
+      rm -rf "$staging"
       return "$status_code"
     fi
   done
@@ -220,7 +241,7 @@ run_server() {
 
   if [[ "$had_group" == false ]]; then
     log "[$SERVER_ID] no groups generated"
-    telegram_send "Backup warning: ${SERVER_ID} no genero grupos de backup"
+    telegram_send_if_enabled "TELEGRAM_NOTIFY_BACKUP_FAILURE" "Backup failed: ${SERVER_ID} no genero grupos de backup" "true"
     rm -rf "$staging"
     return 1
   fi
@@ -232,7 +253,7 @@ run_server() {
 
   restic_cmd snapshots --json > "$STATE_DIR/catalog/${SERVER_ID}-snapshots.json"
   log "[$SERVER_ID] done"
-  telegram_send "Backup OK: ${SERVER_ID} finalizado. Repo ${repo}"
+  telegram_send_if_enabled "TELEGRAM_NOTIFY_BACKUP_SUCCESS" "Backup OK: ${SERVER_ID} finalizado. Repo ${repo}" "true"
   rm -rf "$staging"
 }
 

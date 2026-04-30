@@ -128,6 +128,36 @@ def collect_jobs(server_filename: str, env: dict[str, str]) -> list[ScheduledJob
                     cron_expr=cron_expr,
                 )
             )
+    if env.get("RESOURCE_CHECK_ENABLED", "false").lower() == "true":
+        cron_expr = env.get("RESOURCE_CHECK_CRON", "")
+        if cron_expr:
+            jobs.append(
+                ScheduledJob(
+                    job_key=f"{server_filename}:resource-check",
+                    command=f"{PLATFORM_ROOT}/scripts/orbix-ops.sh resource-check {server_filename}",
+                    cron_expr=cron_expr,
+                )
+            )
+    if env.get("DOCKER_CHECK_ENABLED", "false").lower() == "true":
+        cron_expr = env.get("DOCKER_CHECK_CRON", "")
+        if cron_expr:
+            jobs.append(
+                ScheduledJob(
+                    job_key=f"{server_filename}:docker-check",
+                    command=f"{PLATFORM_ROOT}/scripts/orbix-ops.sh docker-check {server_filename}",
+                    cron_expr=cron_expr,
+                )
+            )
+    if env.get("K8S_CHECK_ENABLED", "false").lower() == "true":
+        cron_expr = env.get("K8S_CHECK_CRON", "")
+        if cron_expr:
+            jobs.append(
+                ScheduledJob(
+                    job_key=f"{server_filename}:k8s-check",
+                    command=f"{PLATFORM_ROOT}/scripts/orbix-ops.sh k8s-check {server_filename}",
+                    cron_expr=cron_expr,
+                )
+            )
     return jobs
 
 

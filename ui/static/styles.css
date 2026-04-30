@@ -470,6 +470,35 @@ tbody tr:hover td {
   margin-top: 3px;
 }
 
+.restore-picker {
+  display: grid;
+  gap: 10px;
+  max-height: 280px;
+  overflow: auto;
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: rgba(4, 16, 18, 0.56);
+}
+
+.restore-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(89, 217, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--muted-strong);
+  word-break: break-word;
+}
+
+.restore-choice input {
+  width: auto;
+  margin-top: 2px;
+  flex: 0 0 auto;
+}
+
 .field label,
 .inline-form label {
   display: block;

@@ -20,6 +20,7 @@ Usage:
   backup-restore-helper.sh list
   backup-restore-helper.sh snapshots <server_id>
   backup-restore-helper.sh ls <server_id> <snapshot_id> [snapshot_subpath]
+  backup-restore-helper.sh plan <server_id> <snapshot_or_ref> <target_dir> [--include <path> ...] [--strategy <staging|direct>] [--scope <full|partial>]
   backup-restore-helper.sh verify <server_id> <snapshot_or_ref> <target_dir> [--include <path> ...] [--strategy <staging|direct>] [--scope <full|partial>]
   backup-restore-helper.sh restore <server_id> <snapshot_or_ref> <target_dir> [--include <path> ...] [--strategy <staging|direct>] [--scope <full|partial>]
 EOF
@@ -92,6 +93,27 @@ verify_snapshot() {
   restic_cmd snapshots "$snapshot_selector" --json >/dev/null
 }
 
+resolve_snapshot_ref() {
+  local server_id="$1"
+  local snapshot_ref="$2"
+  local preferred_group="${3:-full}"
+  if [[ "$snapshot_ref" =~ ^[0-9a-f]{64}$ ]]; then
+    printf '%s\n' "$snapshot_ref"
+    return 0
+  fi
+  if [[ ! -f "$CATALOG_DB" ]]; then
+    printf '%s\n' "$snapshot_ref"
+    return 0
+  fi
+  local resolved
+  resolved=$(sqlite3 "$CATALOG_DB" "select snapshot_id from runs where server_id='$(printf "%s" "$server_id" | sed "s/'/''/g")' and group_name='$(printf "%s" "$preferred_group" | sed "s/'/''/g")' and (snapshot_id='$(printf "%s" "$snapshot_ref" | sed "s/'/''/g")' or restic_short_id='$(printf "%s" "$snapshot_ref" | sed "s/'/''/g")') order by id desc limit 1;" 2>/dev/null || true)
+  if [[ -n "$resolved" ]]; then
+    printf '%s\n' "$resolved"
+  else
+    printf '%s\n' "$snapshot_ref"
+  fi
+}
+
 parse_restore_args() {
   RESTORE_INCLUDE_ARGS=()
   RESTORE_STRATEGY="staging"
@@ -133,10 +155,12 @@ verify_restore() {
   parse_restore_args "$@"
   setup_repo "$server_id"
   ensure_safe_target "$target_dir"
-  verify_snapshot "$snapshot_ref"
+  RESOLVED_SNAPSHOT_REF=$(resolve_snapshot_ref "$server_id" "$snapshot_ref" "full")
+  verify_snapshot "$RESOLVED_SNAPSHOT_REF"
   echo "server_id=$server_id"
   echo "repository=$RESTIC_REPOSITORY"
   echo "snapshot_ref=$snapshot_ref"
+  echo "resolved_snapshot_ref=$RESOLVED_SNAPSHOT_REF"
   echo "target_dir=$target_dir"
   echo "strategy=$RESTORE_STRATEGY"
   echo "scope=$RESTORE_SCOPE"
@@ -228,6 +252,203 @@ manifest_array() {
   jq -r "$jq_expr | .[]?" "$manifest_path"
 }
 
+normalize_manifest_for_restore() {
+  local snapshot_root="$1"
+  local manifest_path="$2"
+  local normalized_path="${manifest_path%.json}.normalized.json"
+  SNAPSHOT_ROOT="$snapshot_root" MANIFEST_PATH="$manifest_path" NORMALIZED_PATH="$normalized_path" python3 <<'PY'
+import json
+import os
+from pathlib import Path
+
+snapshot_root = Path(os.environ["SNAPSHOT_ROOT"])
+manifest_path = Path(os.environ["MANIFEST_PATH"])
+normalized_path = Path(os.environ["NORMALIZED_PATH"])
+manifest = json.loads(manifest_path.read_text())
+
+resources = manifest.get("resources") or []
+compose_projects = manifest.get("artifacts", {}).get("compose_projects") or []
+
+if resources and compose_projects:
+    print(manifest_path)
+    raise SystemExit(0)
+
+
+def basename_label(path: str, fallback: str) -> str:
+    cleaned = path.rstrip("/") or path
+    name = Path(cleaned).name or fallback
+    return name.replace("/", "-")
+
+
+def resource_entry(label: str, source: str, snapshot_path: str, resource_type: str, scope: str, restore_policy: str, priority: int = 50) -> dict[str, object]:
+    return {
+        "label": label,
+        "source": source,
+        "target_path": source,
+        "snapshot_path": snapshot_path,
+        "resource_type": resource_type,
+        "scope": scope,
+        "restore_policy": restore_policy,
+        "priority": priority,
+    }
+
+
+def is_provider_bound(name: str) -> bool:
+    lowered = name.lower()
+    return lowered in {"digitalocean", "containerd"} or "do-agent" in lowered or "droplet-agent" in lowered
+
+
+def compose_priority(source: str, label: str) -> int:
+    lowered = f"{source} {label}".lower()
+    if "netdata" in lowered or "monitor" in lowered:
+        return 90
+    if "frontend" in lowered or "web" in lowered or "ui" in lowered:
+        return 70
+    if "backend" in lowered or "api" in lowered or "worker" in lowered:
+        return 30
+    return 50
+
+
+def discover_compose_projects() -> list[dict[str, object]]:
+    items: list[dict[str, object]] = []
+    seen: set[str] = set()
+    for root in [snapshot_root / "system" / "home", snapshot_root / "system" / "opt", snapshot_root / "system" / "www"]:
+        if not root.exists():
+            continue
+        for compose_file in root.rglob("docker-compose.yml"):
+            rel_parent = compose_file.parent.relative_to(snapshot_root).as_posix()
+            source = "/" + compose_file.parent.relative_to(snapshot_root / "system").as_posix()
+            if source in seen:
+                continue
+            seen.add(source)
+            label = basename_label(source, "compose-project")
+            items.append(resource_entry(label, source, rel_parent, "compose_stack", "portable", "auto", compose_priority(source, label)))
+    return sorted(items, key=lambda item: (item["priority"], item["label"]))
+
+
+def classify_system_path(source: str, snapshot_path: str) -> tuple[str, str, str]:
+    label = basename_label(source, "path").lower()
+    if source == "/root":
+        return ("host_secret", "sensitive", "skip-by-default")
+    if source == "/etc/letsencrypt":
+        return ("cert_bundle", "portable", "manual-review")
+    if source.startswith("/opt/") and is_provider_bound(Path(source).name):
+        return ("provider_artifact", "provider-bound", "skip-by-default")
+    return ("system_path", "portable", "auto")
+
+
+new_resources = list(resources)
+new_system_paths: list[dict[str, str]] = []
+compose_discovered = discover_compose_projects()
+compose_sources = {item["source"] for item in compose_discovered}
+
+for item in manifest.get("artifacts", {}).get("system_paths", []):
+    source = item.get("source", "")
+    snapshot_path = item.get("snapshot_path", "")
+    snapshot_item = snapshot_root / snapshot_path
+    if source in {"/home", "/opt"} and snapshot_item.exists():
+        for child in sorted(snapshot_item.iterdir(), key=lambda child: child.name):
+            child_source = f"{source}/{child.name}"
+            if child_source in compose_sources:
+                continue
+            child_snapshot = f"{snapshot_path}/{child.name}"
+            resource_type, scope, restore_policy = classify_system_path(child_source, child_snapshot)
+            new_resources.append(resource_entry(child.name, child_source, child_snapshot, resource_type, scope, restore_policy, 40 if source == "/home" else 60))
+            if restore_policy.startswith("auto"):
+                new_system_paths.append({"source": child_source, "snapshot_path": child_snapshot})
+        continue
+    resource_type, scope, restore_policy = classify_system_path(source, snapshot_path)
+    new_resources.append(resource_entry(basename_label(source, "path"), source, snapshot_path, resource_type, scope, restore_policy, 10))
+    if restore_policy.startswith("auto"):
+        new_system_paths.append({"source": source, "snapshot_path": snapshot_path})
+
+if not compose_projects:
+    manifest.setdefault("artifacts", {})["compose_projects"] = [
+        {"label": item["label"], "source": item["source"], "snapshot_path": item["snapshot_path"], "priority": item["priority"]}
+        for item in compose_discovered
+    ]
+
+manifest["resources"] = new_resources
+if new_system_paths:
+    manifest.setdefault("artifacts", {})["system_paths"] = new_system_paths
+
+normalized_path.write_text(json.dumps(manifest, indent=2) + "\n")
+print(normalized_path)
+PY
+}
+
+ensure_target_swap() {
+  local manifest_path="$1"
+  [[ -f "$manifest_path" ]] || return 0
+  local minimum_swap_mb minimum_ram_mb
+  minimum_swap_mb=$(manifest_field "$manifest_path" '.restore.minimum_recommended_swap_mb // 0' || echo 0)
+  minimum_ram_mb=$(manifest_field "$manifest_path" '.restore.minimum_recommended_ram_mb // 0' || echo 0)
+  [[ "${SOURCE_MODE:-local}" == "ssh_pull" ]] || return 0
+  [[ "${minimum_swap_mb:-0}" -gt 0 ]] || return 0
+  run_target_cmd "bash -lc '
+    set -e
+    total_mem_kb=\$(awk '\''/MemTotal:/ {print \$2}'\'' /proc/meminfo)
+    total_swap_kb=\$(awk '\''/SwapTotal:/ {print \$2}'\'' /proc/meminfo)
+    total_mem_mb=\$((total_mem_kb / 1024))
+    total_swap_mb=\$((total_swap_kb / 1024))
+    if [ \"\$total_mem_mb\" -lt ${minimum_ram_mb:-0} ] && [ \"\$total_swap_mb\" -lt ${minimum_swap_mb:-0} ]; then
+      if [ ! -f /swapfile ]; then
+        sudo fallocate -l ${minimum_swap_mb}M /swapfile 2>/dev/null || sudo dd if=/dev/zero of=/swapfile bs=1M count=${minimum_swap_mb}
+        sudo chmod 600 /swapfile
+        sudo mkswap /swapfile >/dev/null
+      fi
+      sudo swapon /swapfile 2>/dev/null || true
+      grep -q \"^/swapfile \" /etc/fstab 2>/dev/null || echo \"/swapfile none swap sw 0 0\" | sudo tee -a /etc/fstab >/dev/null
+    fi
+  '"
+}
+
+build_restore_plan() {
+  local manifest_path="$1"
+  local target_dir="$2"
+  local plan_path="$target_dir/restore-plan.json"
+  mkdir -p "$target_dir"
+  MANIFEST_PATH="$manifest_path" PLAN_PATH="$plan_path" python3 <<'PY'
+import json
+import os
+from pathlib import Path
+
+manifest_path = Path(os.environ["MANIFEST_PATH"])
+plan_path = Path(os.environ["PLAN_PATH"])
+manifest = json.loads(manifest_path.read_text())
+
+resources = manifest.get("resources", [])
+auto_resources = [item for item in resources if str(item.get("restore_policy", "")).startswith("auto")]
+manual_resources = [item for item in resources if not str(item.get("restore_policy", "")).startswith("auto")]
+compose_items = sorted(manifest.get("artifacts", {}).get("compose_projects", []), key=lambda item: (item.get("priority", 50), item.get("label", "")))
+docker_items = sorted(manifest.get("artifacts", {}).get("docker_volumes", []), key=lambda item: (item.get("priority", 50), item.get("name", "")))
+
+plan = {
+    "snapshot_version": manifest.get("snapshot_version", ""),
+    "created_at": manifest.get("created_at", ""),
+    "server": manifest.get("server", {}),
+    "summary": {
+        "auto_resource_count": len(auto_resources),
+        "manual_resource_count": len(manual_resources),
+        "auto_labels": [item.get("label") for item in auto_resources],
+        "manual_labels": [item.get("label") for item in manual_resources],
+    },
+    "phases": [
+        {"name": "bootstrap", "actions": ["ensure_target_swap", "ensure_target_packages"]},
+        {"name": "restore-system-paths", "actions": [item.get("source") for item in manifest.get("artifacts", {}).get("system_paths", [])]},
+        {"name": "restore-docker-volumes", "actions": [item.get("name") for item in docker_items]},
+        {"name": "restore-compose-projects", "actions": [item.get("source") for item in compose_items]},
+        {"name": "restore-k8s", "actions": [item.get("source") for item in manifest.get("artifacts", {}).get("k8s_manifests", [])]},
+        {"name": "restore-db-dumps", "actions": [item.get("label") for item in manifest.get("artifacts", {}).get("postgres_dumps", []) + manifest.get("artifacts", {}).get("mysql_dumps", []) + manifest.get("artifacts", {}).get("mongo_dumps", [])]},
+        {"name": "verify", "actions": manifest.get("restore", {}).get("systemd_services", [])},
+    ],
+}
+
+plan_path.write_text(json.dumps(plan, indent=2) + "\n")
+print(json.dumps(plan, separators=(",", ":")))
+PY
+}
+
 warn_legacy_snapshot() {
   log "legacy snapshot detected: no snapshot-manifest.json found"
   log "falling back to plain restore output under workspace/target only"
@@ -292,7 +513,7 @@ restore_compose_projects() {
   local snapshot_root="$1"
   local manifest_path="$2"
   [[ -f "$manifest_path" ]] || return 0
-  jq -c '.artifacts.compose_projects[]?' "$manifest_path" | while IFS= read -r item; do
+  jq -c '.artifacts.compose_projects // [] | sort_by(.priority // 50, .label // .source)[]?' "$manifest_path" | while IFS= read -r item; do
     local label source snapshot_path source_item workdir
     label=$(jq -r '.label' <<<"$item")
     source=$(jq -r '.source' <<<"$item")
@@ -312,7 +533,11 @@ restore_compose_projects() {
       workdir=$(dirname "$source")
     fi
     log "restored compose project $label to $source"
-    run_target_cmd "cd $(printf '%q' "$workdir") && sudo docker compose up -d"
+    if run_target_cmd "test -f $(printf '%q' "$workdir/Dockerfile") || grep -Eq '^[[:space:]]*build:' $(printf '%q' "$workdir/docker-compose.yml") 2>/dev/null || grep -Eq '^[[:space:]]*build:' $(printf '%q' "$workdir/docker-compose.yaml") 2>/dev/null"; then
+      run_target_cmd "cd $(printf '%q' "$workdir") && sudo docker compose up -d --build"
+    else
+      run_target_cmd "cd $(printf '%q' "$workdir") && sudo docker compose up -d"
+    fi
   done
 }
 
@@ -520,6 +745,9 @@ orchestrated_restore() {
     return 0
   fi
 
+  manifest_path=$(normalize_manifest_for_restore "$snapshot_root" "$manifest_path")
+  build_restore_plan "$manifest_path" "$target_dir" >/dev/null
+  ensure_target_swap "$manifest_path"
   ensure_target_packages "$manifest_path"
   restore_system_paths "$snapshot_root" "$manifest_path"
   restore_special_dokploy "$snapshot_root" "$manifest_path"
@@ -563,6 +791,26 @@ case "$cmd" in
     shift 4
     verify_restore "$server_id" "$snapshot_ref" "$target_dir" "$@"
     ;;
+  plan)
+    server_id="${2:?missing server_id}"
+    snapshot_ref="${3:?missing snapshot_or_ref}"
+    target_dir="${4:?missing target_dir}"
+    shift 4
+    verify_restore "$server_id" "$snapshot_ref" "$target_dir" "$@"
+    mkdir -p "$WORK_ROOT"
+    workdir="$WORK_ROOT/${server_id}-plan-$(date +%s)"
+    mkdir -p "$workdir"
+    restore_workspace "$RESOLVED_SNAPSHOT_REF" "$workdir"
+    snapshot_root=$(find_snapshot_root "$workdir")
+    manifest_path="$snapshot_root/snapshot-manifest.json"
+    if [[ ! -f "$manifest_path" ]]; then
+      warn_legacy_snapshot
+      rsync -a "$workdir"/ "$target_dir"/
+      exit 0
+    fi
+    manifest_path=$(normalize_manifest_for_restore "$snapshot_root" "$manifest_path")
+    build_restore_plan "$manifest_path" "$target_dir"
+    ;;
   restore)
     server_id="${2:?missing server_id}"
     snapshot_ref="${3:?missing snapshot_or_ref}"
@@ -570,9 +818,9 @@ case "$cmd" in
     shift 4
     verify_restore "$server_id" "$snapshot_ref" "$target_dir" "$@"
     if [[ "$RESTORE_STRATEGY" == "direct" && "$RESTORE_SCOPE" == "full" && ${#RESTORE_INCLUDE_ARGS[@]} -eq 0 ]]; then
-      orchestrated_restore "$server_id" "$snapshot_ref" "$target_dir"
+      orchestrated_restore "$server_id" "$RESOLVED_SNAPSHOT_REF" "$target_dir"
     else
-      plain_restore "$snapshot_ref" "$target_dir"
+      plain_restore "$RESOLVED_SNAPSHOT_REF" "$target_dir"
     fi
     ;;
   *)

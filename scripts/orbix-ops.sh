@@ -480,6 +480,7 @@ Usage:
   orbix-ops.sh k8s-check <server.env>
   orbix-ops.sh logs <server.env> <source> [target] [lines]
   orbix-ops.sh ssh-test <server.env>
+  orbix-ops.sh bootstrap-ssh <user@host> [password] [port] [key_path]
   orbix-ops.sh test-telegram
 EOF
 }
@@ -503,6 +504,58 @@ ssh_test() {
     'printf "host=%s\nuser=%s\n" "$(hostname)" "$(whoami)"'
 }
 
+bootstrap_ssh() {
+  local target="${1:?missing user@host}"
+  local password="${2:-${ORBIX_SSH_PASSWORD:-}}"
+  local port="${3:-22}"
+  local key_path="${4:-}"
+  local remote_user remote_host key_dir pub_key_path safe_host
+
+  if [[ -z "$password" ]]; then
+    echo "missing password or ORBIX_SSH_PASSWORD" >&2
+    return 1
+  fi
+  if [[ "$target" != *"@"* ]]; then
+    echo "target must be user@host" >&2
+    return 1
+  fi
+  if ! command -v sshpass >/dev/null 2>&1; then
+    echo "sshpass is required for bootstrap-ssh" >&2
+    return 1
+  fi
+
+  remote_user="${target%@*}"
+  remote_host="${target#*@}"
+  safe_host="${remote_host//[^A-Za-z0-9._-]/_}"
+  if [[ -z "$key_path" ]]; then
+    key_dir="/root/.ssh"
+    if [[ $EUID -ne 0 ]]; then
+      key_dir="$HOME/.ssh"
+    fi
+    key_path="${key_dir}/orbix_${remote_user}_${safe_host}_ed25519"
+  fi
+  pub_key_path="${key_path}.pub"
+
+  mkdir -p "$(dirname "$key_path")"
+  chmod 700 "$(dirname "$key_path")"
+  if [[ ! -f "$key_path" ]]; then
+    ssh-keygen -q -t ed25519 -N "" -C "orbix@${safe_host}" -f "$key_path" >/dev/null
+  fi
+
+  ssh-keyscan -p "$port" -H "$remote_host" >> "$(dirname "$key_path")/known_hosts" 2>/dev/null || true
+  sshpass -p "$password" ssh -p "$port" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "$remote_user@$remote_host" \
+    "umask 077; mkdir -p ~/.ssh; touch ~/.ssh/authorized_keys"
+  sshpass -p "$password" ssh -p "$port" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "$remote_user@$remote_host" \
+    "grep -qxF '$(cat "$pub_key_path")' ~/.ssh/authorized_keys || printf '%s\n' '$(cat "$pub_key_path")' >> ~/.ssh/authorized_keys"
+  ssh -i "$key_path" -p "$port" -o StrictHostKeyChecking=yes -o BatchMode=yes "$remote_user@$remote_host" \
+    'printf "host=%s\nuser=%s\n" "$(hostname)" "$(whoami)"'
+
+  printf 'REMOTE_HOST=%s\n' "$remote_host"
+  printf 'REMOTE_PORT=%s\n' "$port"
+  printf 'REMOTE_USER=%s\n' "$remote_user"
+  printf 'REMOTE_SSH_KEY=%s\n' "$key_path"
+}
+
 cmd="${1:-}"
 case "$cmd" in
   disk-check)
@@ -522,6 +575,9 @@ case "$cmd" in
     ;;
   ssh-test)
     ssh_test "${2:?missing server env filename}"
+    ;;
+  bootstrap-ssh)
+    bootstrap_ssh "${2:?missing user@host}" "${3:-}" "${4:-22}" "${5:-}"
     ;;
   test-telegram)
     test_telegram

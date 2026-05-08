@@ -28,6 +28,9 @@ Orbix ya soporta:
 - scheduling por cron declarativo por servidor
 - doctor del host para dependencias, permisos y paths
 - test SSH por perfil remoto
+- bootstrap SSH por `user@ip + password` hacia llave dedicada
+- restore planning con `restore-plan.json`
+- clasificación de recursos auto-restaurables vs sensibles / provider-bound
 
 ## Estructura
 
@@ -50,8 +53,25 @@ Orbix ya soporta:
 3. Orbix ejecuta un hook de recolección.
 4. El staging se empaqueta con `restic` hacia el repo remoto SFTP.
 5. Se actualiza el catálogo local con snapshot, tamaño, paths y duración.
-6. Se registran jobs y logs en la UI.
-7. Telegram recibe alertas de backup y disco.
+6. El restore puede generar un plan explícito antes de tocar el destino.
+7. Se registran jobs y logs en la UI.
+8. Telegram recibe alertas de backup y disco.
+
+## Restore v2
+
+Flujo recomendado:
+
+1. bootstrap del destino con `scripts/orbix-ops.sh bootstrap-ssh user@ip password`
+2. generar plan con `scripts/backup-restore-helper.sh plan <server_id> <snapshot> <target_dir>`
+3. revisar `restore-plan.json`
+4. ejecutar restore solo si el plan separa bien recursos `auto` y `manual`
+
+Orbix ahora intenta:
+
+- excluir por defecto artefactos del proveedor como `digitalocean` o `containerd`
+- marcar `root` y secretos del host como no auto-restaurables
+- autodetectar stacks `docker-compose`
+- forzar swap en destinos chicos antes de compilar stacks pesados
 
 ## UI
 

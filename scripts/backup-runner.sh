@@ -197,8 +197,10 @@ from pathlib import Path
 staging = Path(os.environ["STAGING_DIR"])
 manifest_path = Path(os.environ["MANIFEST_PATH"])
 
+
 def split_shellish(value: str) -> list[str]:
     return [item for item in value.split() if item]
+
 
 def parse_semicolon_entries(value: str) -> list[list[str]]:
     entries: list[list[str]] = []
@@ -209,43 +211,228 @@ def parse_semicolon_entries(value: str) -> list[list[str]]:
         entries.append([part.strip() for part in raw.split("|")])
     return entries
 
+
 def basename_label(path: str, fallback: str) -> str:
     cleaned = path.rstrip("/") or path
     name = Path(cleaned).name or fallback
     return name.replace("/", "-")
 
-def mapped_system_paths(env_key: str) -> list[dict[str, str]]:
-    items = []
-    for source in split_shellish(os.environ.get(env_key, "")):
-        label = basename_label(source, "path")
-        items.append({"source": source, "snapshot_path": f"system/{label}"})
-    return items
 
-def mapped_project_paths(env_key: str, root: str) -> list[dict[str, str]]:
-    items = []
+def resource_entry(
+    *,
+    label: str,
+    source: str,
+    snapshot_path: str,
+    resource_type: str,
+    scope: str,
+    restore_policy: str,
+    target_path: str | None = None,
+    priority: int = 50,
+    notes: str = "",
+) -> dict[str, object]:
+    return {
+        "label": label,
+        "source": source,
+        "target_path": target_path or source,
+        "snapshot_path": snapshot_path,
+        "resource_type": resource_type,
+        "scope": scope,
+        "restore_policy": restore_policy,
+        "priority": priority,
+        "notes": notes,
+    }
+
+
+def is_provider_bound(name: str) -> bool:
+    lowered = name.lower()
+    return lowered in {"digitalocean", "containerd"} or "do-agent" in lowered or "droplet-agent" in lowered
+
+
+def classify_system_child(parent_source: str, child_name: str) -> tuple[str, str, str]:
+    if parent_source == "/opt" and is_provider_bound(child_name):
+        return ("provider_artifact", "provider-bound", "skip-by-default")
+    if parent_source == "/root":
+        return ("host_secret", "sensitive", "skip-by-default")
+    if parent_source == "/etc/letsencrypt":
+        return ("cert_bundle", "portable", "manual-review")
+    return ("system_path", "portable", "auto")
+
+
+def compose_priority(source: str, label: str) -> int:
+    lowered = f"{source} {label}".lower()
+    if "netdata" in lowered or "monitor" in lowered:
+        return 90
+    if "frontend" in lowered or "web" in lowered or "ui" in lowered:
+        return 70
+    if "backend" in lowered or "api" in lowered or "worker" in lowered:
+        return 30
+    return 50
+
+
+def discover_compose_projects() -> list[dict[str, object]]:
+    discovered: list[dict[str, object]] = []
+    search_roots = [staging / "system" / "home", staging / "system" / "opt", staging / "system" / "www"]
+    seen_sources: set[str] = set()
+    for root in search_roots:
+        if not root.exists():
+            continue
+        for compose_file in root.rglob("docker-compose.yml"):
+            rel = compose_file.relative_to(staging).as_posix()
+            source_dir = "/" + compose_file.parent.relative_to(staging / "system").as_posix()
+            if source_dir in seen_sources:
+                continue
+            seen_sources.add(source_dir)
+            label = basename_label(source_dir, "compose-project")
+            discovered.append(
+                resource_entry(
+                    label=label,
+                    source=source_dir,
+                    snapshot_path=rel.rsplit("/", 1)[0],
+                    resource_type="compose_stack",
+                    scope="portable",
+                    restore_policy="auto",
+                    priority=compose_priority(source_dir, label),
+                    notes="autodiscovered compose project",
+                )
+            )
+    return sorted(discovered, key=lambda item: (item["priority"], item["label"]))
+
+
+def mapped_project_paths(env_key: str, root: str, resource_type: str) -> list[dict[str, object]]:
+    items: list[dict[str, object]] = []
     for idx, parts in enumerate(parse_semicolon_entries(os.environ.get(env_key, "")), start=1):
         if len(parts) >= 2:
             label, source = parts[0], parts[1]
         else:
             source = parts[0]
             label = basename_label(source, f"{root}-{idx}")
-        items.append({"label": label, "source": source, "snapshot_path": f"{root}/{label}"})
+        items.append(
+            resource_entry(
+                label=label,
+                source=source,
+                snapshot_path=f"{root}/{label}",
+                resource_type=resource_type,
+                scope="portable",
+                restore_policy="auto",
+                priority=compose_priority(source, label) if resource_type == "compose_stack" else 60,
+            )
+        )
     return items
 
-def mapped_dump_entries(env_key: str, suffix: str) -> list[dict[str, str]]:
-    items = []
+
+def mapped_dump_entries(env_key: str, suffix: str, resource_type: str) -> list[dict[str, object]]:
+    items: list[dict[str, object]] = []
     for parts in parse_semicolon_entries(os.environ.get(env_key, "")):
         label = parts[0]
-        items.append({"label": label, "snapshot_path": f"db-dumps/{label}.{suffix}"})
+        items.append(
+            resource_entry(
+                label=label,
+                source=label,
+                snapshot_path=f"db-dumps/{label}.{suffix}",
+                resource_type=resource_type,
+                scope="portable",
+                restore_policy="auto",
+                priority=20,
+            )
+        )
     return items
 
-system_paths = mapped_system_paths("HOST_PATHS") + mapped_system_paths("HOST_PATHS_OPTIONAL") + mapped_system_paths("REMOTE_PATHS") + mapped_system_paths("REMOTE_PATHS_OPTIONAL")
-docker_volumes = [{"name": name, "snapshot_path": f"docker-volumes/{name}.tar.gz"} for name in split_shellish(os.environ.get("DOCKER_VOLUMES", "") or os.environ.get("REMOTE_DOCKER_VOLUMES", ""))]
-compose_projects = mapped_project_paths("COMPOSE_PROJECT_PATHS", "compose-projects")
-k8s_manifests = mapped_project_paths("K8S_MANIFEST_PATHS", "k8s-manifests")
-postgres_dumps = mapped_dump_entries("LOCAL_POSTGRES_DUMPS", "postgres.sql") + mapped_dump_entries("REMOTE_POSTGRES_DUMPS", "postgres.sql")
-mysql_dumps = mapped_dump_entries("LOCAL_MYSQL_DUMPS", "mysql.sql") + mapped_dump_entries("REMOTE_MYSQL_DUMPS", "mysql.sql")
-mongo_dumps = mapped_dump_entries("LOCAL_MONGO_DUMPS", "mongo.archive") + mapped_dump_entries("REMOTE_MONGO_DUMPS", "mongo.archive")
+
+def discover_system_resources() -> tuple[list[dict[str, object]], list[dict[str, str]]]:
+    resources: list[dict[str, object]] = []
+    artifacts: list[dict[str, str]] = []
+    compose_sources = {item["source"] for item in discover_compose_projects()}
+    static_mappings = [
+        ("/etc/nginx", "system/nginx"),
+        ("/etc/mysql", "system/mysql"),
+        ("/var/www", "system/www"),
+        ("/etc/letsencrypt", "system/letsencrypt"),
+        ("/root", "system/root"),
+    ]
+    for source, snapshot_path in static_mappings:
+        snapshot_item = staging / snapshot_path
+        if not snapshot_item.exists():
+            continue
+        resource_type, scope, restore_policy = classify_system_child(source, basename_label(source, "path"))
+        entry = resource_entry(
+            label=basename_label(source, "path"),
+            source=source,
+            snapshot_path=snapshot_path,
+            resource_type=resource_type,
+            scope=scope,
+            restore_policy=restore_policy,
+            priority=10 if source in {"/etc/nginx", "/etc/mysql"} else 80,
+        )
+        resources.append(entry)
+        if restore_policy.startswith("auto") and source != "/root":
+            artifacts.append({"source": source, "snapshot_path": snapshot_path})
+
+    for parent_source, parent_snapshot in [("/home", "system/home"), ("/opt", "system/opt")]:
+        parent_path = staging / parent_snapshot
+        if not parent_path.exists():
+            continue
+        for child in sorted([item for item in parent_path.iterdir() if item.exists()], key=lambda item: item.name):
+            source = f"{parent_source}/{child.name}"
+            if source in compose_sources:
+                continue
+            resource_type, scope, restore_policy = classify_system_child(parent_source, child.name)
+            entry = resource_entry(
+                label=child.name,
+                source=source,
+                snapshot_path=f"{parent_snapshot}/{child.name}",
+                resource_type=resource_type,
+                scope=scope,
+                restore_policy=restore_policy,
+                priority=40 if parent_source == "/home" else 60,
+            )
+            resources.append(entry)
+            if restore_policy.startswith("auto"):
+                artifacts.append({"source": source, "snapshot_path": entry["snapshot_path"]})
+    return resources, artifacts
+
+
+def unique_by_source(items: list[dict[str, object]]) -> list[dict[str, object]]:
+    unique: list[dict[str, object]] = []
+    seen_sources: set[str] = set()
+    for item in items:
+        source = str(item["source"])
+        if source in seen_sources:
+            continue
+        seen_sources.add(source)
+        unique.append(item)
+    return unique
+
+
+system_resources, system_paths = discover_system_resources()
+declared_compose_projects = mapped_project_paths("COMPOSE_PROJECT_PATHS", "compose-projects", "compose_stack")
+compose_projects = unique_by_source(declared_compose_projects + discover_compose_projects())
+k8s_manifests = mapped_project_paths("K8S_MANIFEST_PATHS", "k8s-manifests", "k8s_manifest")
+docker_volumes = [
+    resource_entry(
+        label=name,
+        source=name,
+        snapshot_path=f"docker-volumes/{name}.tar.gz",
+        resource_type="docker_volume",
+        scope="portable",
+        restore_policy="auto",
+        priority=25,
+    )
+    for name in split_shellish(os.environ.get("DOCKER_VOLUMES", "") or os.environ.get("REMOTE_DOCKER_VOLUMES", ""))
+]
+postgres_dumps = mapped_dump_entries("LOCAL_POSTGRES_DUMPS", "postgres.sql", "postgres_dump") + mapped_dump_entries("REMOTE_POSTGRES_DUMPS", "postgres.sql", "postgres_dump")
+mysql_dumps = mapped_dump_entries("LOCAL_MYSQL_DUMPS", "mysql.sql", "mysql_dump") + mapped_dump_entries("REMOTE_MYSQL_DUMPS", "mysql.sql", "mysql_dump")
+mongo_dumps = mapped_dump_entries("LOCAL_MONGO_DUMPS", "mongo.archive", "mongo_dump") + mapped_dump_entries("REMOTE_MONGO_DUMPS", "mongo.archive", "mongo_dump")
+all_resources = system_resources + compose_projects + k8s_manifests + docker_volumes + postgres_dumps + mysql_dumps + mongo_dumps
+required_packages = set(json.loads(os.environ.get("REQUIRED_PACKAGES_JSON", "[]")))
+system_sources = {item["source"] for item in system_resources if str(item.get("restore_policy", "")).startswith("auto")}
+if "/etc/nginx" in system_sources:
+    required_packages.add("nginx")
+if "/etc/mysql" in system_sources:
+    required_packages.add("mysql-server")
+if postgres_dumps:
+    required_packages.add("postgresql-client")
+if compose_projects or docker_volumes:
+    required_packages.update({"docker.io", "docker-compose-v2"})
 
 manifest = {
     "snapshot_version": "orbix-v2",
@@ -257,20 +444,33 @@ manifest = {
         "profile_filename": Path(os.environ.get("ENV_FILE_PATH", "")).name if os.environ.get("ENV_FILE_PATH") else "",
     },
     "restore": {
-        "required_apt_packages": json.loads(os.environ.get("REQUIRED_PACKAGES_JSON", "[]")),
+        "required_apt_packages": sorted(required_packages),
         "systemd_services": split_shellish(os.environ.get("RESTORE_SYSTEMD_SERVICES", "")),
         "allow_cross_host": True,
         "default_mode": "full-auto",
         "legacy_fallback": True,
+        "bootstrap_swap_if_low_memory": True,
+        "minimum_recommended_ram_mb": 2048 if (docker_volumes or compose_projects) else 512,
+        "minimum_recommended_swap_mb": 2048 if (docker_volumes or compose_projects) else 0,
     },
+    "resources": all_resources,
     "artifacts": {
         "system_paths": system_paths,
-        "compose_projects": compose_projects,
-        "k8s_manifests": k8s_manifests,
-        "docker_volumes": docker_volumes,
-        "postgres_dumps": postgres_dumps,
-        "mysql_dumps": mysql_dumps,
-        "mongo_dumps": mongo_dumps,
+        "compose_projects": [
+            {"label": item["label"], "source": item["source"], "snapshot_path": item["snapshot_path"], "priority": item["priority"]}
+            for item in compose_projects
+        ],
+        "k8s_manifests": [
+            {"label": item["label"], "source": item["source"], "snapshot_path": item["snapshot_path"]}
+            for item in k8s_manifests
+        ],
+        "docker_volumes": [
+            {"name": item["label"], "snapshot_path": item["snapshot_path"], "priority": item["priority"]}
+            for item in docker_volumes
+        ],
+        "postgres_dumps": [{"label": item["label"], "snapshot_path": item["snapshot_path"]} for item in postgres_dumps],
+        "mysql_dumps": [{"label": item["label"], "snapshot_path": item["snapshot_path"]} for item in mysql_dumps],
+        "mongo_dumps": [{"label": item["label"], "snapshot_path": item["snapshot_path"]} for item in mongo_dumps],
         "dokploy_config": "dokploy-config" if (staging / "dokploy-config").exists() else "",
         "dokploy_db_dump": "dokploy-db/dokploy.sql" if (staging / "dokploy-db" / "dokploy.sql").exists() else "",
     },
